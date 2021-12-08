@@ -1,0 +1,33 @@
+{
+  "include": [
+    "src/**/*ts",
+    "src/**/*tsx"
+  ],
+  "compilerOptions": {
+    "lib": [
+      "es2018"
+    ],
+    "target": "es2018",
+    "module": "commonjs",
+    "outDir": "dist",
+    "rootDir": "src",
+    "moduleResolution": "node",
+    "isolatedModules": false,
+    "jsx": "react",
+    "downlevelIteration": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "declaration": true,
+    "removeComments": true,
+    "sourceMap": true,
+    "noLib": false,
+    "skipLibCheck": true,
+    "preserveConstEnums": true,
+    "esModuleInterop": true,
+    "strict": false,
+    "noImplicitAny": false
+  },
+  "exclude": [
+    "node_modules"
+  ]
+}
