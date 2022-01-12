@@ -1,36 +1,41 @@
 
-import Params from './Params'
-import { MountPoint, HandlerCallback, ItemCallback } from './Mounts'
+import { Step } from './Step'
 import { toQuery, QueryLike } from './Query'
-import PreparedQuery from './PreparedQuery'
+import { StoredQuery } from './StoredQuery'
 import { TableImplementationError } from './Errors'
 import { Item } from './Item'
+import { parseTableDecl } from './parser/parseTableDecl'
+import { MountSpec, MountPointSpec, MountAttr } from './MountPoint'
 
-type StringSet = Map<string, true>
+export type ItemCallback = (item: Item, ctx?: Step) => null | void | Item | Item[] | Promise<Item | Item[]>
 export type SetupCallback = (setup: Setup) => void
+export type HandlerCallback = (ctx: Step) => void | Promise<any>
 
-export interface MountAttr {
-    required?: boolean
-    withValue?: boolean
-    assumeInclude?: boolean
-}
-
-export type MountAttrMap = Map<string, MountAttr>;
-
-export interface TableBindParams {
+export interface LooseBindParams {
     attrs?: string | string[] | { [attr: string]: MountAttr }
     name?: string
     run?: HandlerCallback
 }
 
-export interface MountPointSpec {
-    attrs: MountAttrMap
-    name?: string
-    run?: HandlerCallback
-}
+function toMountSpec(looseSpec: LooseBindParams) {
+    const attrs: { [attr: string]: MountAttr } = {};
 
-export interface MountSpec {
-    mounts: MountPointSpec[]
+    const result: MountPointSpec = {
+        name: looseSpec.name,
+        attrs: {},
+        run: looseSpec.run,
+    }
+
+    if (typeof looseSpec.attrs === 'string') {
+        result.attrs[looseSpec.attrs] = { required: true };
+    } else if (Array.isArray(looseSpec.attrs)) {
+        for (const attr of looseSpec.attrs)
+            result.attrs[attr] = { required: true };
+    } else {
+        result.attrs = looseSpec.attrs;
+    }
+
+    return result;
 }
 
 export class Setup {
@@ -39,42 +44,28 @@ export class Setup {
     _tableName: string
     aliasQuery: QueryLike
     runCallback: HandlerCallback
+    isV2Callback: boolean
     parent: Setup
     children: Setup[] = []
 
-    table(params: TableBindParams) {
+    bind(looseSpec: LooseBindParams) {
 
-        if ((params as any).requiredAttrs)
-            throw new Error('requiredAttrs got deleted');
-        if ((params as any).optionalAttrs)
-            throw new Error('requiredAttrs got deleted');
-        if (!params.attrs)
-            throw new Error("table definition is missing .attrs");
-
-        if (typeof params !== 'object')
+        if (typeof looseSpec !== 'object')
             throw new TableImplementationError('table() expected object input');
 
+        const spec = toMountSpec(looseSpec);
         const child = new Setup();
         child.parent = this;
         child.attrs = {}
 
-        const { name, attrs } = params;
+        const { name, attrs } = spec;
 
         if (name) {
             child.tableName(name);
         }
 
-        const isList = (Array.isArray(attrs) || typeof attrs === 'string')
-
-        if (Array.isArray(attrs) || typeof attrs === 'string') {
-            for (const attr of toList(attrs)) {
-                child.attrs[attr] = child.attrs[attr] || {};
-                child.attrs[attr].required = true;
-            }
-        } else {
-            for (const [ attr, attrConfig ] of Object.entries(attrs)) {
-                child.attrs[attr] = attrConfig;
-            }
+        for (const [ attr, attrConfig ] of Object.entries(attrs)) {
+            child.attrs[attr] = attrConfig;
         }
 
         for (const [ attr, attrConfig ] of Object.entries(child.attrs)) {
@@ -91,19 +82,25 @@ export class Setup {
 
         this.children.push(child);
 
-        if (params.run) {
-            child.runCallback = params.run;
+        if (spec.run) {
+            child.runCallback = spec.run;
         }
 
         return child;
     }
 
-    value(item: Item) {
-        // TODO
+    table(params: LooseBindParams) {
+        return this.bind(params);
     }
 
-    mount(params: TableBindParams) {
-        return this.table(params);
+    mount(decl: string, callback: HandlerCallback) {
+        const bind = toTableBind(decl, callback);
+        this.bind(bind);
+    }
+
+    func(decl: string, callback: ItemCallback) {
+        const bind = toTableBind(decl, itemCallbackToHandler(callback));
+        this.bind(bind);
     }
 
     tableName(name: string) {
@@ -120,16 +117,25 @@ export class Setup {
         return this;
     }
 
+    run(callback: HandlerCallback) {
+        if (this.runCallback) {
+            throw new Error("already have a 'run' callback");
+        }
+
+        this.runCallback = callback;
+        return this;
+    }
+
     put(callback: HandlerCallback) {
         const subTable = this.table({ attrs: { put: {} }});
         return subTable.get(callback);
     }
 
     getAttrsWithInherited() {
-        const result: MountAttrMap = new Map();
+        const result: { [attr: string]: MountAttr } = {};
 
         for (const [key,value] of Object.entries(this.attrs))
-            result.set(key,value);
+            result[key] = value;
 
         let parent = this.parent;
 
@@ -140,7 +146,8 @@ export class Setup {
                 throw new Error("internal error: too many loops in getAttrsWithInherited");
 
             for (const [ attr, attrConfig ] of Object.entries(parent.attrs)) {
-                result.set(attr, { ...attrConfig });
+                if (!result[attr])
+                    result[attr] = { ...attrConfig };
             }
 
             parent = parent.parent;
@@ -159,13 +166,13 @@ export class Setup {
 
     toMountSpec(): MountSpec {
         const result: MountSpec = {
-            mounts: []
+            points: []
         };
 
         for (const child of this.iterateChildren()) {
             if (child.runCallback) {
 
-                result.mounts.push({
+                result.points.push({
                     attrs: child.getAttrsWithInherited(),
                     name: child._tableName,
                     run: child.runCallback
@@ -180,7 +187,7 @@ export class Setup {
         const query = toQuery(queryLike);
         if (query.t !== 'pipedQuery')
             throw new Error('expected pipedQuery');
-        return new PreparedQuery(query);
+        return new StoredQuery(query);
     }
 
     alias(aliasQuery: QueryLike) {
@@ -193,3 +200,48 @@ function toList(s: string | string[]) {
         return s;
     return [s];
 }
+
+export function toTableBind(decl: string, callback: HandlerCallback) {
+    const params = parseTableDecl(decl);
+    if (params.t === 'parseError')
+        throw new Error("Failed to parse: " + decl + ' ' + params);
+    params.run = callback;
+    return params;
+}
+
+export function itemCallbackToHandler(callback: ItemCallback): HandlerCallback {
+    return (ctx: Step) => {
+        const input = ctx.queryToItem();
+
+        const data: any = callback(input, ctx);
+
+        if (data && data.then) {
+            ctx.async();
+
+            return data.then(data => {
+                if (!data)
+                    return;
+
+                if (Array.isArray(data)) {
+                    for (const el of data)
+                        ctx.put(el);
+                    return
+                }
+
+                ctx.put(data);
+            });
+        } else {
+            if (!data)
+                return;
+
+            if (Array.isArray(data)) {
+                for (const el of data)
+                    ctx.put(el);
+                return
+            }
+
+            ctx.put(data);
+        }
+    }
+}
+

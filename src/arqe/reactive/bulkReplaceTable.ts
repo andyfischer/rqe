@@ -1,5 +1,5 @@
 
-import { MemoryTable as Table } from '../MemoryTable'
+import { Table } from '../Table'
 import { Stream } from '../Stream'
 
 export function bulkReplaceTable(destination: Table) {

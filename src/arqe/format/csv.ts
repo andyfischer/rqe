@@ -1,5 +1,5 @@
 
-import { MemoryTable as Table } from '../MemoryTable'
+import { Table } from '../Table'
 
 interface Options {
     attrs?: string[]

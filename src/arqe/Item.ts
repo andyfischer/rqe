@@ -21,3 +21,11 @@ export function attrs(item: Item) {
 export function entries(item: Item) {
     return Object.entries(item);
 }
+
+export function shallowCopy(item: Item) {
+    return { ...item };
+}
+
+export function newItem(): Item {
+    return {}
+}

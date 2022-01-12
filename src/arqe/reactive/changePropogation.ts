@@ -1,8 +1,8 @@
 
-import { MemoryTable as Table } from '../MemoryTable'
+import { Table } from '../Table'
 import { TableSchema } from '../Schema'
-import { ItemChangeEvent } from '../Table'
-import { MountPoint } from '../Mounts'
+import { ItemChangeEvent } from './ItemChangeEvent'
+import { MountPoint } from '../MountPoint'
 
 export function applyChange(change: ItemChangeEvent, table: Table, changeInfo?: any) {
     switch (change.verb) {
@@ -19,6 +19,7 @@ export function applyChange(change: ItemChangeEvent, table: Table, changeInfo?: 
 
 export function applyChangeToMountedTable(change: ItemChangeEvent, table: MountPoint, changeInfo?: any) {
 
+    /* TODO
     switch (change.verb) {
 
     case 'put':
@@ -29,6 +30,7 @@ export function applyChangeToMountedTable(change: ItemChangeEvent, table: MountP
         table.delete().callWithItem(change.item, changeInfo);
         break;
     }
+    */
 }
 
 export function applyChangeList(changes: ItemChangeEvent[], table: Table) {

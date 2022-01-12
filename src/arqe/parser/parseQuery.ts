@@ -1,45 +1,50 @@
 
-import { TokenIterator, Token, TokenDef, t_plain_value, t_quoted_string, t_star,
+import { TokenIterator, Token, TokenDef, t_quoted_string, t_star,
     t_space, t_hash, t_newline, t_bar, t_slash,
     t_dot, t_question, t_integer, t_dash, t_dollar, t_lbracket, t_rbracket,
     t_lparen, t_rparen, t_equals, t_line_comment, lexStringToIterator } from './lexer'
 import { parseQueryTupleFromTokens } from './parseQueryTuple'
 import ParseError from './ParseError'
-import { Query, QueryStep } from '../Query'
+import { Query, QueryTuple } from '../Query'
 
 interface ParseContext {
-    expect?: 'query' | 'transform'
+    expectTransform?: boolean
 }
 
 export function parseQueryFromTokens(it: TokenIterator, ctx: ParseContext): Query | ParseError {
 
-    const steps: QueryStep[] = [];
+    const steps: QueryTuple[] = [];
     let isFirst = true;
 
     while (!it.finished()) {
 
-        // First tuple of a query does not have a verb.
-        const expectVerb = !(ctx.expect === 'query' && isFirst);
+        // -  If the caller says expectTransform=true, then we expect a verb.
+        // -  Otherwise, the first tuple does not expect a verb.
+
+        const expectVerb = !isFirst || ctx.expectTransform;
+        isFirst = false;
 
         it.skipSpaces();
 
         if (it.finished())
             break;
 
-        const step: QueryStep | ParseError = parseQueryTupleFromTokens(it, { expectVerb });
+        if (it.nextIs(t_bar)) {
+            // Queries can start with a leading | , which means to interpret this as a transform.
+            // Consume it and loop (and isFirst will be false on next iteration)
+            it.consume();
+            continue;
+        }
+
+        const step: QueryTuple | ParseError = parseQueryTupleFromTokens(it, { expectVerb });
         if (step.t === 'parseError')
             return step;
-
-        if (!expectVerb && step.t === 'queryStep') {
-            step.verb = 'get';
-        }
 
         steps.push(step);
 
         if (!it.tryConsume(t_bar))
             break;
 
-        isFirst = false;
     }
 
     return {
@@ -48,7 +53,7 @@ export function parseQueryFromTokens(it: TokenIterator, ctx: ParseContext): Quer
     }
 }
 
-export function parseQuery(str: string, ctx: ParseContext = { expect: 'query' }) {
+export function parseQuery(str: string, ctx: ParseContext = {}) {
     try {
         const it = lexStringToIterator(str);
         return parseQueryFromTokens(it, ctx);

@@ -1,16 +1,20 @@
 
-import Params from '../Params'
+import { Step } from '../Step'
 
-export default function count(params: Params) {
+function prepare(step: Step) {
+    step.put({ count: null });
+}
+
+function run(step: Step) {
     let count = 0;
 
-    params.input.sendTo({
+    step.input.sendTo({
         receive(data) {
             switch (data.t) {
 
             case 'done':
-                params.output.put({ count });
-                params.output.done();
+                step.output.put({ count });
+                step.output.done();
                 break;
 
             case 'item':
@@ -18,8 +22,13 @@ export default function count(params: Params) {
                 break;
 
             default:
-                params.output.receive(data);
+                step.output.receive(data);
             }
         }
     })
+}
+
+export const count = {
+    prepare,
+    run
 }

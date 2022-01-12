@@ -1,5 +1,5 @@
 
-import Params from './Params'
+import { Step } from './Step'
 import { Setup } from './Setup'
 import { Graph } from './Graph'
 

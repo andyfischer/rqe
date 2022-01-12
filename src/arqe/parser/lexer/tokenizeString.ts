@@ -1,12 +1,13 @@
 
 import Context from './Context'
-import TokenIterator from './TokenIterator'
+import { TokenIterator } from './TokenIterator'
 import Token from './Token'
 import TokenDef from './TokenDef'
 import LexedText from './LexedText'
+import { LexerSettings } from './LexerSettings'
 import { t_ident, t_integer, t_unrecognized, t_space, t_double_dash,
     t_line_comment, t_quoted_string, t_double_equals,
-    t_plain_value, tokenFromSingleCharCode } from './tokens'
+    t_plain_value, t_gthan, t_right_arrow, t_right_fat_arrow, tokenFromSingleCharCode } from './tokens'
 
 const c_0 = '0'.charCodeAt(0);
 const c_9 = '9'.charCodeAt(0);
@@ -15,6 +16,7 @@ const c_z = 'z'.charCodeAt(0);
 const c_A = 'A'.charCodeAt(0);
 const c_Z = 'Z'.charCodeAt(0);
 const c_dash = '-'.charCodeAt(0);
+const c_gthan = '>'.charCodeAt(0);
 const c_under = '_'.charCodeAt(0);
 const c_space = ' '.charCodeAt(0);
 const c_equals = '='.charCodeAt(0);
@@ -24,6 +26,8 @@ const c_hash = '#'.charCodeAt(0);
 const c_single_quote = "'".charCodeAt(0);
 const c_double_quote = "\"".charCodeAt(0);
 const c_backslash = '\\'.charCodeAt(0);
+const c_exclaim = '!'.charCodeAt(0);
+const c_slash = '/'.charCodeAt(0);
 
 function isLowerCase(c) {
     return c >= c_a && c <= c_z;
@@ -37,10 +41,17 @@ function isDigit(c) {
     return c >= c_0 && c <= c_9;
 }
 
-function isPlainValueCharacter(c) {
+function canStartPlainValue(c) {
     return (isLowerCase(c) || isUpperCase(c) || isDigit(c)
         || c === c_dash
         || c === c_under)
+}
+
+function canContinuePlainValue(c) {
+    return (isLowerCase(c) || isUpperCase(c) || isDigit(c)
+        || c === c_dash
+        || c === c_under
+        || c === c_exclaim);
 }
 
 function canStartIdentifier(c) {
@@ -51,12 +62,6 @@ function canContinueIdentifier(c) {
     return (isLowerCase(c) || isUpperCase(c) || isDigit(c)
         || c === c_dash
         || c === c_under);
-}
-
-function consumeNumber(input: Context) {
-    // todo, handle floats
-
-    return input.consumeWhile(t_integer, isDigit);
 }
 
 function consumeQuotedString(input: Context, lookingFor: number) {
@@ -85,15 +90,15 @@ function consumeQuotedString(input: Context, lookingFor: number) {
 
 function consumePlainValue(input: Context) {
     let lookahead = 0;
-    let allNumbers = true;
+    let isAllNumbers = true;
 
-    while (isPlainValueCharacter(input.next(lookahead))) {
+    while (canContinuePlainValue(input.next(lookahead))) {
         if (!isDigit(input.next(lookahead)))
-            allNumbers = false;
+            isAllNumbers = false;
         lookahead++;
     }
 
-    if (allNumbers)
+    if (isAllNumbers)
         return input.consume(t_integer, lookahead);
     else
         return input.consume(t_plain_value, lookahead);
@@ -102,13 +107,28 @@ function consumePlainValue(input: Context) {
 function consumeNext(input: Context) {
     const c: number = input.next(0);
 
-    if (isPlainValueCharacter(c))
+    if (c === c_equals && input.next(1) === c_equals)
+        return input.consume(t_double_equals, 2);
+
+    if (c === c_dash && input.next(1) === c_dash)
+        return input.consume(t_double_dash, 2);
+
+    if (c === c_dash && input.next(1) === c_gthan)
+        return input.consume(t_right_arrow, 2);
+
+    if (c === c_equals && input.next(1) === c_gthan)
+        return input.consume(t_right_fat_arrow, 2);
+
+    if (c === c_slash && input.next(1) === c_slash && input.settings.cStyleLineComments)
+        return input.consumeWhile(t_line_comment, c => c !== c_newline);
+
+    if (canStartPlainValue(c))
         return consumePlainValue(input);
 
     if (canStartIdentifier(c))
         return input.consumeWhile(t_ident, canContinueIdentifier);
 
-    if (c === c_hash)
+    if (c === c_hash && input.settings.bashStyleLineComments)
         return input.consumeWhile(t_line_comment, c => c !== c_newline);
 
     if (c === c_single_quote)
@@ -120,23 +140,14 @@ function consumeNext(input: Context) {
     if (c === c_space)
         return input.consumeWhile(t_space, c => c === c_space);
 
-    if (isDigit(c))
-        return consumeNumber(input);
-
-    if (c === c_equals && input.next(1) === c_equals)
-        return input.consume(t_double_equals, 2);
-
-    if (c === c_dash && input.next(1) === c_dash)
-        return input.consume(t_double_dash, 2);
-
     if (tokenFromSingleCharCode[c])
         return input.consume(tokenFromSingleCharCode[c], 1);
 
     return input.consume(t_unrecognized, 1);
 }
 
-export function tokenizeString(str: string): LexedText {
-    const context = new Context(str);
+export function tokenizeString(str: string, settings: LexerSettings = {}): LexedText {
+    const context = new Context(str, settings);
 
     while (!context.finished()) {
 
@@ -152,8 +163,8 @@ export function tokenizeString(str: string): LexedText {
 
     const result = new LexedText(str);
     result.tokens = context.resultTokens;
-    result.iterator = new TokenIterator(context.resultTokens);
-    result.iterator.result = result;
+    result.iterator = new TokenIterator(context.resultTokens, settings);
+    result.iterator.sourceText = result;
     return result;
 }
 

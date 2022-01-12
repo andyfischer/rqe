@@ -2,10 +2,12 @@
 import { Stream, PipedData } from '../Stream'
 import { IDSource } from '../utils/IDSource'
 import { Item } from '../Item'
+import { ErrorItem } from '../Errors'
 import { TableFormatState, newTableFormatState, formatItems, updateStateForItems,
     formatHeader, printItems } from './TableFormatter';
 import { Graph } from '../Graph';
-import { MemoryTable } from '../MemoryTable'
+import { Table } from '../Table'
+import { queryTupleToString } from '../Query'
 
 interface Task {
     id: string
@@ -83,11 +85,8 @@ export class LiveConsoleFormatter {
                         task.flushTimer = setTimeout(() => this.flushTaskBuffer(task.id), this.flushDelayMs);
 
                     break;
-                case 'warn':
-                    this.log(`warning: ${msg.warningType} ${msg.message || ''}`);
-                    break;
                 case 'error':
-                    this.log(`error: ${msg.message} ${msg.stack || ''}`);
+                    this.logError(msg.item);
                     break;
                 case 'done':
                     this.finishTask(id);
@@ -100,7 +99,26 @@ export class LiveConsoleFormatter {
         return task;
     }
 
-    printTable(table: MemoryTable) {
+    logError(error: ErrorItem) {
+        if (error.errorType === 'no_table_found') {
+
+            if (error.query)
+                this.log(`error: No table found for query: ${queryTupleToString(error.query)}`);
+            else
+                this.log(`error: No table found for query: ${JSON.stringify(error)}`);
+
+            return;
+        }
+
+        if (error.errorType === 'verb_not_found') {
+            this.log(`error: Verb not recognized: ${error.verb}`);
+            return;
+        }
+
+        this.log(`error: ${error.errorType} ${error.message || ''} ${error.stack || ''}`);
+    }
+
+    printTable(table: Table) {
         const task = this.createTask();
         task.incoming.putTableItems(table);
         task.incoming.done();

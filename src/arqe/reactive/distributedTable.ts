@@ -1,9 +1,9 @@
 
 import { TableSchema, findUniqueAttr } from '../Schema'
-import { MemoryTable as Table } from '../MemoryTable'
-import { randomHex } from '../utils'
+import { Table } from '../Table'
+import { randomHex } from '../utils/randomHex'
 import { TableSchemaIssue } from '../Errors'
-import { ItemChangeEvent } from '../Table'
+import { ItemChangeEvent } from './ItemChangeEvent'
 
 interface Params {
     source: Table

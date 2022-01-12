@@ -1,62 +1,90 @@
 
 import { IDSource } from './utils/IDSource'
-import { MemoryTable } from './MemoryTable'
-import { runPipedQuery } from './runQuery'
+import { Table } from './Table'
 import { Scope } from './Scope'
 import { Stream } from './Stream'
 import { Setup, SetupCallback } from './Setup'
 import { Module } from './Module'
-import { QueryTag, QueryLike, toQuery, Query } from './Query'
-import PreparedQuery from './PreparedQuery'
-import { mountMap, MapMountConfig } from './commonMounts/map'
-import { mountObject, ObjectMountConfig } from './commonMounts/object'
-import { mountList, ListMountConfig } from './commonMounts/list'
-import { mountTable as mountMemoryTable } from './MemoryTable/mountTable'
+import { QueryTag, QueryLike, toQuery, Query, QueryTuple } from './Query'
+import { StoredQuery } from './StoredQuery'
+import { setupMap, MapMountConfig, setupObject, ObjectMountConfig, setupList, ListMountConfig } from './datastructures'
+import { mountTable as mountMemoryTable } from './Table/mountTable'
 import { TableSchema, LooseTableSchema, setupWithMountSpec, fixLooseSchema } from './Schema'
-import { Table, ItemChangeListener } from './Table'
+import { ItemChangeListener } from './reactive/ItemChangeEvent'
 import { applyChangeToMountedTable } from './reactive/changePropogation'
 import { randomHex } from './utils/randomHex'
 import { applyTransform } from './Transform'
 import { Item } from './Item'
 import { setupBrowse } from './Browse'
+import { ItemCallback, toTableBind, itemCallbackToHandler } from './Setup'
+import { PlannedQuery, MountPointRef } from './PlannedQuery'
+import { RunningQuery } from './RunningQuery'
+import { graphToString } from './Debug'
+import { Provider, newProviderTable } from './Providers'
+import { MountPoint } from './MountPoint'
+import { setupLoggingSubsystem, EmptyLoggingSubsystem } from './LoggingSubsystem'
+import { getQueryMountMatch, QueryMountMatch } from './Matching'
+import { AstModification } from './Block'
 
 let _nextGraphID = new IDSource('graph-');
+
+export interface QueryExecutionContext {
+    env?: {
+        [key: string]: any
+    }
+    parameters?: {
+        [key: string]: any
+    }
+    mod?: AstModification
+    input?: Stream
+}
 
 export class Graph {
     graphId: string
     anonTableName = new IDSource('anontable-');
     nextTableId = new IDSource('table-');
+    nextModuleId = new IDSource('module-');
     modules: Module[] = [];
+    modulesById = new Map<string, Module>();
     tables = new Map<string, Table>()
     tablesByName = new Map<string, Table>()
-    tableSetListeners: ItemChangeListener[]
-    
+    schemaListeners: ItemChangeListener[] = []
+    providerTable: Table<Provider>
     tableRedefineOnExistingName = false
+    logging = new EmptyLoggingSubsystem()
 
     constructor() {
         this.graphId = _nextGraphID.take() + randomHex(6);
-        this.setupBuiltins();
     }
 
-    setupBuiltins() {
+    setupBrowse() {
         this.createModule(setup => setupBrowse(setup));
+    }
+
+    enableLogging() {
+        setupLoggingSubsystem(this);
     }
 
     tablesIt() {
         return this.tables.values();
     }
 
-    newTable<T = any>(schema?: LooseTableSchema): MemoryTable<T> {
+    addTable(table: Table, name: string, id?: string) {
+        id = id || this.nextTableId.take();
+    }
+
+    newTable<T = any>(schema?: LooseTableSchema): Table<T> {
         schema = schema || {};
         schema.name = schema.name || this.anonTableName.take();
 
         schema = fixLooseSchema(schema);
-        const table = new MemoryTable<T>(schema, { graph: this });
+        const tableId = this.nextTableId.take();
+        const table = new Table<T>(schema, { graph: this, tableId });
         this.tables.set(table.tableId, table);
 
         if (this.tablesByName.has(schema.name)) {
             if (this.tableRedefineOnExistingName) {
-                return this.tablesByName.get(schema.name) as MemoryTable<T>;
+                return this.tablesByName.get(schema.name) as Table<T>;
             }
 
             throw new Error("Already have a table with name: " + schema.name);
@@ -64,48 +92,40 @@ export class Graph {
 
         this.tablesByName.set(schema.name, table);
 
-        if (schema.mount) {
-            const setup = new Setup();
-            setupWithMountSpec(schema.mount, setup);
-            mountMemoryTable(setup, table);
+        let setup = new Setup();
+        setup = setupWithMountSpec(schema.mount, setup);
+        mountMemoryTable(setup, table);
 
-            this.createModule(setup);
-        }
-
-        if (this.tableSetListeners) {
-            for (const listener of this.tableSetListeners) {
-                listener({
-                    verb: 'put',
-                    item: {
-                        name: schema.name,
-                        table,
-                    }
-                })
-            }
-        }
+        this.createModule(setup);
 
         return table;
     }
 
     mountMap(config: MapMountConfig) {
         const setup = new Setup();
-        mountMap(setup, config);
+        setupMap(setup, config);
         this.createModule(setup);
     }
 
     mountObject(config: ObjectMountConfig) {
         const setup = new Setup();
-        mountObject(setup, config);
+        setupObject(setup, config);
         return this.createModule(setup);
     }
 
     mountList(config: ListMountConfig) {
         return this.createModule(setup => {
-            mountList(setup, config);
+            setupList(setup, config);
         });
     }
 
-    mountTable(table: MemoryTable) {
+    mountFunc(decl: string, callback: ItemCallback) {
+        return this.createModule(setup => {
+            setup.table(toTableBind(decl, itemCallbackToHandler(callback)));
+        });
+    }
+
+    mountTable(table: Table) {
         return this.createModule(setup => {
             mountMemoryTable(setup, table);
         });
@@ -113,12 +133,36 @@ export class Graph {
 
     *everyTable() {
         for (const module of this.modules)
-            yield* module.tables;
+            yield* module.points;
+    }
+
+    *everyMountPoint() {
+        for (let moduleIndex=0; moduleIndex < this.modules.length; moduleIndex++) {
+            const module = this.modules[moduleIndex];
+            for (const point of module.points)
+                yield point;
+        }
+    }
+
+    *getQueryMountMatches(tuple: QueryTuple) {
+        for (const point of this.everyTable()) {
+            const match = getQueryMountMatch(tuple, point);
+
+            if (match)
+                yield {point,match};
+        }
+    }
+
+    getMountPoint(ref: MountPointRef): MountPoint {
+        const module = this.modulesById.get(ref.moduleId);
+        if (!module)
+            return null;
+        return module.pointsById.get(ref.pointId);
     }
 
     findTableByName(name: string) {
         for (const module of this.modules)
-            for (const table of module.tables)
+            for (const table of module.points)
                 if (table.name === name)
                     return table;
         return null;
@@ -133,21 +177,31 @@ export class Graph {
             setup(setupObj);
         }
         const module = this.createEmptyModule();
-        module.redefine(setupObj);
+        module.redefine(setupObj.toMountSpec());
         return module;
     }
 
     createEmptyModule() {
-        const module = new Module();
+        const module = new Module(this);
         this.modules.push(module);
+        this.modulesById.set(module.moduleId, module);
         return module;
     }
 
-    query(queryLike: QueryLike, input?: Stream): Stream {
+    query(queryLike: QueryLike, parameters: any = {}, context: QueryExecutionContext = {}) {
         const query = toQuery(queryLike, { graph: this });
-        const scope = new Scope(this);
-        input = input || Stream.newEmptyStream();
-        return runPipedQuery(scope, query, input);
+        const planned = new PlannedQuery(this, query, context);
+        const running = new RunningQuery(this, planned, context);
+        return running.output;
+    }
+
+    put(object: any): Stream {
+        return this.query({
+            attrs: {
+                ...object,
+                'put!': null,
+            }
+        });
     }
 
     prepareQuery(queryLike: QueryLike): Query {
@@ -158,27 +212,34 @@ export class Graph {
         return toQuery(queryLike, { graph: this });
     }
 
-    applyTransform(items: Item[], queryLike: QueryLike): Item[] {
+    applyTransform(items: Item[], queryLike: QueryLike): Stream {
         return applyTransform(this, items, this.prepareTransform(queryLike));
     }
 
-    put(object: any): Stream {
-        return this.query({
-            attrs: {
-                ...object,
-                put: true
-            }
-        });
-    }
-
-    callPrepared(prepared: PreparedQuery, values: { [attr: string]: any }): Stream {
+    callPrepared(prepared: StoredQuery, values: { [attr: string]: any }): Stream {
         const query = prepared.withValues(values);
         return this.query(query);
     }
 
-    addTableSetListener(listener: ItemChangeListener) {
-        this.tableSetListeners = this.tableSetListeners || [];
-        this.tableSetListeners.push(listener);
+    providers(): Table<Provider> {
+        if (!this.providerTable)
+            this.providerTable = newProviderTable(this);
+
+        return this.providerTable;
+    }
+
+    addSchemaListener(listener: ItemChangeListener, { backlog }: { backlog?: boolean } = {}) {
+        if (backlog) {
+            for (const module of this.modules) {
+                module.sendUpdate(listener);
+            }
+        }
+
+        this.schemaListeners.push(listener);
+    }
+
+    str(options: { reproducible?: boolean } = {}) {
+        return graphToString(this, options);
     }
 }
 

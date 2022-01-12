@@ -1,6 +1,6 @@
 
 # inmemory-query #
 
-Small helper library that acts as an in-memory database, with querying and transformations.
+Javascript library for doing database-like operations on in-memory data
 
 

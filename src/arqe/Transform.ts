@@ -1,13 +1,13 @@
 
 import { Item } from './Item'
 import { TransformDefs } from './transforms/_list'
-import Params from './Params'
+import { Step } from './Step'
 import { Graph } from './Graph'
 import { javascriptQuickMountIntoGraph } from './QuickMount'
-import { runPipedQuery } from './runQuery'
 import { Scope } from './Scope'
 import { Stream } from './Stream'
-import { Query } from './Query'
+import { Query, QueryLike, toQuery } from './Query'
+import { runQuery } from './RunningQuery'
 
 export type TransformFunc = (input: Item, args: any) => Item[]
 export interface TransformDef {
@@ -48,8 +48,6 @@ export function toTransformQuery(graph: Graph | null, looseQuery: TransformQuery
 
                 const mount = javascriptQuickMountIntoGraph(graph, looseStep);
 
-                console.log('mounted:', mount);
-
                 throw new Error('todo: handle function');
             }
 
@@ -58,43 +56,55 @@ export function toTransformQuery(graph: Graph | null, looseQuery: TransformQuery
     }
 }
 
-/*
-export function applyTransform(query: TransformQuery, items: Item[]) {
+export function applyTransform(graph: Graph, items: Item[], query: Query): Stream {
 
-    let out = [];
-
-    let fromLastStep = items;
-    let toNextStep = [];
-    for (const step of query.steps) {
-        const verb = step.verb;
-        const stepDef = TransformDefs[verb];
-
-        for (const item of fromLastStep) {
-            const results = stepDef.func(item, step);
-            toNextStep = toNextStep.concat(results);
-        }
-
-        fromLastStep = toNextStep;
-        toNextStep = [];
+    if (query.steps.length > 0 && !query.steps[0].verb) {
+        throw new Error('applyTransform expected a transform query');
     }
-
-    return fromLastStep;
-}
-*/
-
-export function applyTransform(graph: Graph, items: Item[], query: Query): Item[] {
 
     const scope = new Scope(graph);
     const inputAsStream = new Stream();
 
-    const output = runPipedQuery(scope, query, inputAsStream);
+    const output = runQuery(null, query, inputAsStream);
 
     for (const item of items) {
         inputAsStream.put(item);
     }
     inputAsStream.done();
 
-    if (!output.isDone())
-        throw new Error("query didn't finish synchronously");
-    return output.takeBacklogItems();
+    return output;
+}
+
+export function applyTransformationToGraph(graph: Graph, transformLike: QueryLike) {
+
+    const transform = toQuery(transformLike);
+    const accessStep = transform.steps[0];
+
+    // Run the query.
+    const results = graph.query(transform).sync();
+
+    if (results.hasError()) {
+        throw results.errorsToException();
+    }
+
+    const matches = graph.getQueryMountMatches(accessStep);
+
+    // Delete the current contents.
+    const deleteStep = {
+        ...accessStep,
+        tags: accessStep.tags.concat({ t: 'tag', attr: 'delete!', value: { t: 'no_value' } }),
+    };
+
+    graph.query(deleteStep);
+
+    // Put the results as the new contents.
+    for (const item of results) {
+        const putStep = {
+            attrs: {
+                ...item,
+                'put!': null,
+            }
+        }
+        graph.query(putStep);
+    }
 }

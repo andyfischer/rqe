@@ -29,8 +29,9 @@ export function consoleFormatRelation(rel: Table): string[] {
 
     const out = [];
 
-    for (const warn of rel.warnings())
-        out.push(`#warning ${warn.warningType} ${warn.message || ''}`);
+    if (rel.hasError())
+        for (const error of rel.errors().list())
+            out.push(`#error ${error.errorType} ${error.message || ''}`);
 
     if (isMultiColumn(rel)) {
         for (const line of consolePrintTable(rel)) {
@@ -45,5 +46,5 @@ export function consoleFormatRelation(rel: Table): string[] {
 }
 
 export function consoleFormatError(rel: Table) {
-    return rel.errors().map(error => `Error: ${error.message}`)
+    return rel.errors().list().map(error => `Error: ${error.message}`)
 }

@@ -1,8 +1,8 @@
 
-import Params from './Params'
-import { MountPoint } from './Mounts'
+import { Step } from './Step'
+import { MountPoint } from './MountPoint'
 
-export function explainWhyQueryFails(params: Params, table: MountPoint) {
+export function explainWhyQueryFails(params: Step, table: MountPoint) {
     const missingRequired: string[] = [];
     const missingRequiredValue: string[] = [];
     const extraAttrs: string[] = [];

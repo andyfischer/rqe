@@ -7,6 +7,7 @@ export function setupBrowse(setup: Setup) {
             browse: {},
             name: { assumeInclude: true },
             attrs: { assumeInclude: true },
+            provider_id: { assumeInclude: true },
         },
     })
     .get(p => {
@@ -14,10 +15,11 @@ export function setupBrowse(setup: Setup) {
 
         p.putHeader({ browse: null, name: null, attrs: null });
 
-        for (const table of graph.everyTable()) {
+        for (const point of graph.everyTable()) {
             p.put({
-                name: table.name,
-                attrs: Array.from(table.attrs.entries()) as any,
+                name: point.name,
+                attrs: Array.from(point.attrs.entries()) as any,
+                provider_id: point.providerId,
             });
         }
     });

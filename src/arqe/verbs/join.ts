@@ -1,8 +1,20 @@
 
-import Params from '../Params'
+import { Step } from '../Step'
 import { Stream, PipeReceiver } from '../Stream'
-import { runTableSearch } from '../runQuery'
-import { StringValue } from '../Query'
+import { runTableSearch } from '../RunningQuery'
+import { StringValue } from '../TaggedValue'
+import { prepareTableSearch } from '../PlannedQuery'
+import { Block } from '../Block'
+import { c_done, c_item } from '../Enums'
+
+function prepare(step: Step, later: Block) {
+    const mainStep = later.namedInput('step');
+
+    let updatedStep = mainStep;
+    updatedStep = later.step_with_verb(updatedStep, 'get');
+
+    prepareTableSearch(step, updatedStep, later);
+}
 
 function mapStreamForEachItem(forEach: (item) => Stream) {
 
@@ -15,7 +27,7 @@ function mapStreamForEachItem(forEach: (item) => Stream) {
         input: {
             receive(data) {
                 switch (data.t) {
-                case 'done':
+                case c_done:
                     incomingHasFinished = true;
 
                     if (incomingHasFinished && unfinishedMappedStreams === 0) {
@@ -24,7 +36,7 @@ function mapStreamForEachItem(forEach: (item) => Stream) {
                     }
                     
                     break;
-                case 'item': {
+                case c_item: {
                     const item = data.item;
                     // console.log('mapStreamForEachItem opening stream for', item);
                     const streamForInput = forEach(item);
@@ -57,7 +69,7 @@ function mapStreamForEachItem(forEach: (item) => Stream) {
     }
 }
 
-export default function join(params: Params) {
+function run(step: Step) {
 
     // Run a 1-per-1 join:
     //   For each lhs result, run the rhs query.
@@ -72,11 +84,11 @@ export default function join(params: Params) {
         thisOutput.sendTo({
             receive(data) {
                 switch (data.t) {
-                    case 'done':
+                    case c_done:
                         // console.log('join fixedOutput done');
                         fixedOutput.done();
                         break;
-                    case 'item':
+                    case c_item:
                         // console.log('join fixedOutput saw rhs result: ', data.item);
 
                         const fixedItem = {
@@ -96,12 +108,12 @@ export default function join(params: Params) {
             }
         });
 
-        const tags = params.tags.map(tag => {
-            if (tag.value.t === 'noValue' && lhsItem[tag.attr] !== undefined) {
+        const tags = step.tags.map(tag => {
+            if (tag.value.t === 'no_value' && lhsItem[tag.attr] !== undefined) {
                 return {
                     ...tag,
                     value: {
-                        t: 'strValue',
+                        t: 'str_value',
                         str: lhsItem[tag.attr] as string,
                     } as StringValue
                 }
@@ -110,7 +122,7 @@ export default function join(params: Params) {
             }
         });
 
-        const updatedParams = params
+        const updatedParams = step
                           .withVerb('get')
                           .withTags(tags)
                           .withInput(Stream.newEmptyStream())
@@ -123,7 +135,11 @@ export default function join(params: Params) {
         return fixedOutput;
     });
 
-    params.input.sendTo(input);
-    output.sendTo(params.output);
+    step.input.sendTo(input);
+    output.sendTo(step.output);
 }
 
+export const join = {
+    prepare,
+    run,
+}

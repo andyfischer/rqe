@@ -1,6 +1,6 @@
 
-import { QueryLike, LoosePipedQuery, QueryStepLike, Query, QueryStep,
-    prepareLooseQueryStep, toQuery } from './Query'
+import { QueryLike, LoosePipedQuery, QueryTupleLike, Query, QueryTuple,
+    toQueryTuple, toQuery } from './Query'
 
 export function add(...queries: QueryLike[]): Query {
 
@@ -23,10 +23,10 @@ export function add(...queries: QueryLike[]): Query {
     }
 }
 
-export function where(looseLhs: QueryLike, looseWhereCondition: QueryStepLike): Query {
+export function where(looseLhs: QueryLike, looseWhereCondition: QueryTupleLike): Query {
 
     const lhs = toQuery(looseLhs);
-    const where = prepareLooseQueryStep({}, looseWhereCondition);
+    const where = toQueryTuple(looseWhereCondition);
 
     return {
         t: 'pipedQuery',

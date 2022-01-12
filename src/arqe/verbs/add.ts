@@ -1,18 +1,34 @@
 
 import { Stream, joinStreams } from '../Stream'
-import Params from '../Params'
-import { runTableSearch } from '../runQuery'
+import { Step } from '../Step'
+import { prepareTableSearch } from '../PlannedQuery'
+import { shallowCopy } from '../Item'
+import { QueryTag, tagsToItem } from '../Query'
+import { Block } from '../Block'
 
-export default function add(params: Params) {
+function prepare(step: Step, later: Block) {
+    for (const it of step.input)
+        step.put(it);
 
-    const { receivers, stream } = joinStreams(2);
-    stream.sendTo(params.output);
+    step.put(tagsToItem(step.tags));
 
-    params.input.sendTo(receivers[0]);
+    const mainStep = later.namedInput('step');
 
-    runTableSearch(params
-                      .withVerb('get')
-                      .withInput(Stream.newEmptyStream())
-                      .withOutput(Stream.newStreamToReceiver(receivers[1])));
+    const receivers = later.join_streams(2, later.step_output(mainStep));
+    const inputReceiver = later.get_index(receivers, 0);
+    later.send_to(later.step_input(mainStep), inputReceiver);
+
+    const searchReceiver = later.get_index(receivers, 1);
+
+    let updatedStep = mainStep;
+    updatedStep = later.step_with_verb(updatedStep, 'get');
+    updatedStep = later.step_with_input(updatedStep, later.new_stream());
+    updatedStep = later.step_with_output(updatedStep, searchReceiver);
+
+    prepareTableSearch(step, updatedStep, later);
 }
 
+export const add = {
+    prepare,
+    runUsingBlock: true,
+}

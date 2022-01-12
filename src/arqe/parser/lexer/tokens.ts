@@ -43,6 +43,16 @@ export const t_rbrace: TokenDef = {
     bracketSide: 'right'
 }
 
+export const t_gthan: TokenDef = {
+    name: "gthan",
+    str: ">",
+}
+
+export const t_lthan: TokenDef = {
+    name: "lthan",
+    str: "<",
+}
+
 export const t_slash = {
     name: "slash",
     str: "/"
@@ -76,6 +86,16 @@ export const t_dash = {
 export const t_double_dash = {
     name: "double-dash",
     str: "--"
+}
+
+export const t_right_arrow = {
+    name: "right-arrow",
+    str: "->"
+}
+
+export const t_right_fat_arrow = {
+    name: "right-fat-arrow",
+    str: "=>"
 }
 
 export const t_star = {
@@ -113,7 +133,7 @@ export const t_tilde = {
     str: "~"
 }
 
-export const t_exclamation = {
+export const t_exclaim = {
     name: "exclamation",
     str: "!"
 }
@@ -168,12 +188,16 @@ export const everyToken: TokenDef[] = [
     t_rbracket,
     t_lbrace,
     t_rbrace,
+    t_gthan,
+    t_lthan,
     t_slash,
     t_dot,
     t_semicolon,
     t_colon,
     t_plus,
     t_dash,
+    t_double_dash,
+    t_right_arrow,
     t_star,
     t_equals,
     t_double_equals,
@@ -181,7 +205,7 @@ export const everyToken: TokenDef[] = [
     t_percent,
     t_dollar,
     t_tilde,
-    t_exclamation,
+    t_exclaim,
     t_bar,
     t_question,
     t_ident,

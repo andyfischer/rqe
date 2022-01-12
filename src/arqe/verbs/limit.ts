@@ -1,31 +1,36 @@
 
-import Params from '../Params'
+import { Step } from '../Step'
 
-export default function limit(params: Params) {
+function prepare(step: Step) {
+    for (const item of step.input)
+        step.put(item);
+}
 
-    const limit = parseInt(params.getPositionalAttr(0));
+function run(step: Step) {
+
+    const limit = parseInt(step.get('count'));
     let count = 0;
 
     let limitReached = false;
 
     function setLimitReached() {
-        params.input.setBackpressureStop();
+        step.input.setBackpressureStop();
         limitReached = true;
     }
 
     if (limit === 0) {
         setLimitReached();
-        params.output.done();
+        step.output.done();
         return;
     }
 
-    params.input.sendTo({
+    step.input.sendTo({
         receive(data) {
             switch (data.t) {
 
             case 'done':
                 if (!limitReached)
-                    params.output.done();
+                    step.output.done();
                 break;
 
             case 'item':
@@ -34,17 +39,22 @@ export default function limit(params: Params) {
                 if (count > limit)
                     return;
 
-                params.output.receive(data);
+                step.output.receive(data);
 
                 if (count == limit) {
-                    params.output.done();
+                    step.output.done();
                     setLimitReached();
                 }
                 break;
 
             default:
-                params.output.receive(data);
+                step.output.receive(data);
             }
         }
     })
+}
+
+export const limit = {
+    prepare,
+    run,
 }

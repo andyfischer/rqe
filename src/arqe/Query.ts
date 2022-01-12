@@ -1,41 +1,25 @@
 
 import { parseQuery } from './parser/parseQuery'
-import { ItemChangeEvent } from './Table'
+import { parseQueryTuple } from './parser/parseQueryTuple'
 import { Graph } from './Graph'
 import { javascriptQuickMountIntoGraph } from './QuickMount'
+import { Item, newItem } from './Item'
+import { StringValue, QueryValue, NoValue, TaggedValue } from './TaggedValue'
 
-export type QueryStepLike = LooseQueryVerbStep | Function;
-export type QueryLike = string | Query | LoosePipedQuery | QueryStepLike | QueryStepLike[]
-
-interface Star {
-    t: 'star'
-}
-
-export interface StringValue {
-    t: 'strValue'
-    str: string
-}
-
-export interface NoValue {
-    t: 'noValue'
-}
-
-export type QueryTagValue = StringValue | NoValue
+export type QueryTupleLike = QueryTuple | LooseQueryVerbStep | Function | string;
+export type QueryLike = string | Query | LoosePipedQuery | QueryTupleLike | QueryTupleLike[]
 
 export interface QueryTag {
-    t: 'queryTag'
-
+    t: 'tag'
     identifier?: string
-
     attr?: string
     specialAttr?: { t: 'star' }
-
-    value: QueryTagValue
-
+    value: TaggedValue
     isOptional?: true
+    isFlag?: true
 }
 
-export interface QueryStep {
+export interface QueryTuple {
     t: 'queryStep'
     verb: string
     tags: QueryTag[]
@@ -43,7 +27,7 @@ export interface QueryStep {
 
 export interface Query {
     t: 'pipedQuery'
-    steps: QueryStep[]
+    steps: QueryTuple[]
 }
 
 export interface LooseQueryVerbStep {
@@ -51,16 +35,16 @@ export interface LooseQueryVerbStep {
     attrs: { [key: string]: any }
 }
 
-
 export interface LoosePipedQuery {
     steps: LooseQueryVerbStep[]
 }
 
 interface QueryPrepareContext {
     graph?: Graph
+    expectTransform?: boolean
 }
 
-export function prepareLooseQueryStep(ctx: QueryPrepareContext, step: QueryStepLike): QueryStep {
+export function toQueryTuple(step: QueryTupleLike, ctx: QueryPrepareContext = {}): QueryTuple {
     if (typeof step === 'function') {
         if (!ctx.graph)
             throw new Error("Can't prepare a mounted function without a graph");
@@ -71,9 +55,9 @@ export function prepareLooseQueryStep(ctx: QueryPrepareContext, step: QueryStepL
 
         for (const [ attrName, attrConfig ] of mount.attrs.entries()) {
             tags.push({
-                t: 'queryTag',
+                t: 'tag',
                 attr: attrName,
-                value: { t: 'noValue' },
+                value: { t: 'no_value' },
             });
         }
 
@@ -86,45 +70,47 @@ export function prepareLooseQueryStep(ctx: QueryPrepareContext, step: QueryStepL
         throw new Error('not handled yet');
     }
 
+    if (typeof step === 'string') {
+        const parsed = parseQueryTuple(step, { expectVerb: true });
+        if (parsed.t === 'parseError')
+            throw new Error("parse error: " + parsed);
+        return parsed as QueryTuple;
+    }
+
+    if ((step as QueryTuple).t === 'queryStep')
+        return step as QueryTuple;
+
+    const looseStep = step as LooseQueryVerbStep;
     const tags = [];
 
-    if (!step.attrs)
+    if (!looseStep.attrs)
         throw new Error("step is missing .attrs");
 
-    for (const [ key, value ] of Object.entries(step.attrs)) {
+    for (const [ key, value ] of Object.entries(looseStep.attrs)) {
         tags.push({
-            t: 'queryTag',
+            t: 'tag',
             attr: key,
-            value: value == null ? { t: 'noValue' } : { t: 'strValue', str: value },
+            value: value == null ? { t: 'no_value' } : { t: 'str_value', str: value },
         });
     }
 
     return {
         t: 'queryStep',
-        verb: step.verb || 'get',
+        verb: looseStep.verb || 'get',
         tags
     };
 }
 
-function looseStepsListToQuery(ctx: QueryPrepareContext, steps: QueryStepLike[]) {
+function looseStepsListToQuery(ctx: QueryPrepareContext, steps: QueryTupleLike[]) {
     const query: Query = {
         t: 'pipedQuery',
-        steps: steps.map(step => prepareLooseQueryStep(ctx, step))
+        steps: steps.map(step => toQueryTuple(step, ctx))
     }
 
-    validateConvertedQuery(query);
+    // validateConvertedQuery(query);
 
     return query;
 }
-
-function validateConvertedQuery(query: Query) {
-    if (query.steps.length === 0)
-        throw new Error("query has empty .steps list");
-
-    if (query.steps[0].verb !== 'get')
-        throw new Error("expected first query step to be 'get'");
-}
-
 
 export function toQuery(queryLike: QueryLike, ctx: QueryPrepareContext = {}): Query {
     if ((queryLike as any).t === 'pipedQuery')
@@ -133,7 +119,7 @@ export function toQuery(queryLike: QueryLike, ctx: QueryPrepareContext = {}): Qu
 
     if (typeof queryLike === 'string') {
         // Parse string
-        const parsed = parseQuery(queryLike);
+        const parsed = parseQuery(queryLike, { expectTransform: ctx.expectTransform });
 
         if (parsed.t === 'parseError') {
             throw new Error("Parse error: " + parsed.message);
@@ -147,8 +133,121 @@ export function toQuery(queryLike: QueryLike, ctx: QueryPrepareContext = {}): Qu
     }
 
     if (Array.isArray(queryLike)) {
-        return looseStepsListToQuery(ctx, queryLike as QueryStepLike[]);
+        return looseStepsListToQuery(ctx, queryLike as QueryTupleLike[]);
     }
 
     return looseStepsListToQuery(ctx, [queryLike as LooseQueryVerbStep]);
+}
+
+export function isQuery(v: any) {
+    if (v.t === 'pipedQuery')
+        return true;
+
+    return false;
+}
+
+export function tagsToItem(tags: QueryTag[]) {
+    const item: Item = {};
+    for (const tag of tags) {
+        switch (tag.value.t) {
+            case 'str_value':
+                item[tag.attr] = tag.value.str;
+                break;
+            case 'no_value':
+                item[tag.attr] = null;
+                break;
+            case 'query_value':
+                item[tag.attr] = tag.value.query;
+                break;
+        }
+    }
+
+    return item;
+}
+
+export function queryTupleToString(tuple: QueryTuple) {
+    const out = [tuple.verb];
+
+    for (const tag of tuple.tags) {
+
+        if (tag.specialAttr && tag.specialAttr.t === "star") {
+            out.push('*');
+            continue;
+        }
+
+        let attr = tag.attr;
+
+        if (tag.isFlag)
+            attr = '--' + attr;
+
+        switch (tag.value.t) {
+        case 'no_value':
+            out.push(attr);
+            break;
+        case 'str_value':
+            out.push(`${attr}=${tag.value.str}`);
+            break;
+        case 'query_value':
+            out.push(`${attr}=(${queryToString(tag.value.query)})`);
+            break;
+        }
+    }
+
+    return out.join(' ');
+}
+
+export function queryToString(query: Query) {
+    return query.steps.map(queryTupleToString).join(' | ');
+}
+
+function shallowCopyTag(tag: QueryTag): QueryTag {
+    return { ...tag }
+}
+
+function shallowCopyTuple(tuple: QueryTuple): QueryTuple {
+    return {
+        t: tuple.t,
+        verb: tuple.verb,
+        tags: tuple.tags.concat(),
+    }
+}
+
+function shallowCopyQuery(query: Query): Query {
+    return {
+        t: 'pipedQuery',
+        steps: query.steps.concat(),
+    }
+}
+
+export function* rewriteQueryTags(ref: { query: Query }): IterableIterator<[ QueryTag, () => QueryTag ]> {
+    
+    let copiedQuery = false;
+
+    for (let stepIndex=0; stepIndex < ref.query.steps.length; stepIndex++) {
+        let step = ref.query.steps[stepIndex];
+        let copiedTuple = false;
+
+        for (let tagIndex=0; tagIndex < step.tags.length; tagIndex++) {
+            let tag = step.tags[tagIndex];
+
+            function getWritableTag(): QueryTag {
+                if (!copiedQuery) {
+                    ref.query = shallowCopyQuery(ref.query);
+                    copiedQuery = true;
+                }
+
+                if (!copiedTuple) {
+                    step = shallowCopyTuple(step);
+                    ref.query.steps[stepIndex] = step;
+                    copiedTuple = true;
+                }
+
+                const newTag = shallowCopyTag(tag);
+                step.tags[tagIndex] = newTag;
+                return newTag;
+            }
+
+            yield [ tag, getWritableTag ];
+        }
+    }
 }

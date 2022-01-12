@@ -2,6 +2,10 @@
 export class IDSourceNumber {
     next: number = 1;
 
+    copyFrom(source: IDSourceNumber) {
+        this.next = source.next;
+    }
+
     take() {
         const out = this.next;
         this.next++;

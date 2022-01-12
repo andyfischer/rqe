@@ -1,7 +1,12 @@
 
-import Params from '../Params'
+import { Step } from '../Step'
 
-export default function value(params: Params) {
-    params.output.put(params.queryToItem());
-    params.input.sendTo(params.output);
+function run(step: Step) {
+    step.output.put(step.queryToItem());
+    step.input.sendTo(step.output);
+}
+
+export const value = {
+    prepare: run,
+    run,
 }

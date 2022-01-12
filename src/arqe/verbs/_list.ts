@@ -1,40 +1,61 @@
 
-import Params from '../Params'
-import { runTableSearch } from '../runQuery'
+import { Step } from '../Step'
+import { Verb } from './_shared'
 
-import add from './add'
-import count from './count'
-import join from './join'
-import limit from './limit'
-import last from './last'
-import rate from './rate'
-import rename from './rename'
-import reverse from './reverse'
-import save_to_csv from './save_to_csv'
-import where from './where'
-import value from './value'
+import { add } from './add'
+import { count } from './count'
+import { get } from './get'
+import { join } from './join'
+import { just } from './just'
+import { limit } from './limit'
+import { last } from './last'
+import { one } from './one'
+import { rate } from './rate'
+import { rename } from './rename'
+import { reverse } from './reverse'
+import { run_query_with_provider } from './run_query_with_provider'
+import { save_to_csv } from './save_to_csv'
+import { then } from './then'
+import { trace } from './trace'
+import { wait } from './wait'
+import { where } from './where'
+import { without } from './without'
+import { value } from './value'
 
-let _everyVerb;
+let _everyVerb: { [name: string]: Verb };
 
 function init() {
     _everyVerb = {
         add,
         count,
-        get: runTableSearch,
-        put: runTableSearch,
+        get,
         join,
+        just,
         limit,
         last,
+        one,
         save_to_csv,
+        then,
         rate,
         rename,
         reverse,
+        run_query_with_provider,
+        trace,
+        wait,
         where,
+        without,
         value,
     }
 }
 
-export function getVerbHandler(verb: string) {
+export function everyVerb(): { [name: string]: any } {
+    if (!_everyVerb)
+        init();
+
+    return _everyVerb;
+}
+
+export function getVerb(verb: string) {
     if (!_everyVerb)
         init();
 

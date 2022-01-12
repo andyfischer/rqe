@@ -1,12 +1,16 @@
 
-import Params from '../Params'
+import { Step } from '../Step'
 
-export default function rate(params: Params) {
+function prepare(step: Step) {
+    // TODO
+}
+
+function run(step: Step) {
     let totalCount = 0;
     let bucketCount = 0;
     let startedBucket = Date.now();
 
-    params.input.sendTo({
+    step.input.sendTo({
         receive(msg) {
             switch (msg.t) {
                 case 'item':
@@ -27,13 +31,19 @@ export default function rate(params: Params) {
                         startedBucket = now;
                         bucketCount = 0;
 
-                        params.put({ count: totalCount, rate });
+                        step.put({ count: totalCount, rate });
                     }
 
                     break;
                 default:
-                    params.output.receive(msg);
+                    step.output.receive(msg);
             }
         }
     });
 }
+
+export const rate = {
+    prepare,
+    run,
+}
+

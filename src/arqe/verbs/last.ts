@@ -1,26 +1,30 @@
 
-import Params from '../Params'
+import { Step } from '../Step'
 
-export default function last(params: Params) {
+function prepare(step: Step) {
+    step.input.sendTo(step.output);
+}
+
+function run(step: Step) {
     let firstRecordedIndex = null;
     let lastRecordedIndex = null;
     let items = new Map<number, any>();
-    const limit = parseInt(params.getPositionalAttr(0));
+    const limit = parseInt(step.get('count'));
 
     if (limit === 0) {
-        params.output.done();
+        step.output.done();
         return;
     }
 
-    params.input.sendTo({
+    step.input.sendTo({
         receive(data) {
             switch (data.t) {
 
             case 'done':
                 for (const item of items.values())
-                    params.output.receive(item);
+                    step.output.receive(item);
 
-                params.output.done();
+                step.output.done();
                 break;
 
             case 'item':
@@ -40,8 +44,13 @@ export default function last(params: Params) {
                 break;
 
             default:
-                params.output.receive(data);
+                step.output.receive(data);
             }
         }
     })
+}
+
+export const last = {
+    prepare,
+    run
 }

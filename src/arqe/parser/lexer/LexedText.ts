@@ -1,6 +1,6 @@
 
 import Token from './Token'
-import TokenIterator from './TokenIterator'
+import { TokenIterator } from './TokenIterator'
 import unescape from './unescape'
 import { t_quoted_string } from './tokens'
 import SourcePos from './SourcePos'
@@ -32,5 +32,14 @@ export default class LexedText {
             return this.originalStr.length;
 
         return this.tokens[tokenIndex].startPos;
+    }
+
+    getTextRange(startPos: number, endPos: number) {
+        let out = '';
+
+        for (let i = startPos; i < endPos; i++)
+            out += this.getTokenText(this.tokens[i]);
+
+        return out;
     }
 }

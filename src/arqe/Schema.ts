@@ -1,18 +1,19 @@
 
-import { MemoryTable } from './MemoryTable'
+import { Table } from './Table'
 import { Setup } from './Setup'
 import { Graph } from './Graph'
+import { Item } from './Item'
 
-export interface IndexConfigurationObject {
+export interface IndexConfiguration {
     attrs: string[]
     unique?: boolean | UniqueConstraintConfig
 }
 
-export type IndexConfig = string | IndexConfigurationObject
+export type IndexConfig = string | IndexConfiguration
 
 export interface Reference {
     attr: string
-    table?: MemoryTable
+    table?: Table
     foreignAttr?: string
     onDelete: OnDeleteOption
 }
@@ -32,7 +33,7 @@ export interface LooseAttrConfig {
         onDelete: OnDeleteOption
     }
     foreignKey?: {
-        table: MemoryTable
+        table: Table
         foreignAttr: string
         onDelete?: OnDeleteOption
     }
@@ -51,7 +52,7 @@ export interface AttrConfig {
         onDelete: OnDeleteOption
     }
     foreignKey?: {
-        table: MemoryTable
+        table: Table
         foreignAttr: string
         onDelete?: OnDeleteOption
     }
@@ -76,9 +77,11 @@ export interface TableSchema {
     indexes?: IndexConfig[]
     references?: Reference[]
     foreignKeys?: Reference[]
+    initialItems?: Item[]
 
     hint?: 'inmemory'
     mount?: MountSpec
+    funcs?: string[]
 }
 
 export interface LooseTableSchema {
@@ -87,15 +90,19 @@ export interface LooseTableSchema {
     indexes?: IndexConfig[]
     references?: Reference[]
     foreignKeys?: Reference[]
+    initialItems?: Item[]
 
     hint?: 'inmemory'
     mount?: MountSpec
+    funcs?: string[]
 }
 
 export function setupWithMountSpec(spec: MountSpec, setup: Setup): Setup {
-    if (spec === true) {
+    if (!spec) 
         return setup;
-    }
+
+    if (spec === true)
+        throw new Error("don't need spec=true");
 
     if (typeof spec === 'function')
         return spec(setup);

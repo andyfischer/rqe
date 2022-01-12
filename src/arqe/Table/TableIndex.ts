@@ -1,6 +1,6 @@
 
 import { AttrSet, AttrMap, LooseAttrList, header, itemGlobalId } from '.'
-import { MemoryTable } from '.'
+import { Table } from '.'
 
 function valueToKeyString(value: any) {
     if (value == null || value == undefined) {
@@ -20,12 +20,12 @@ function valueToKeyString(value: any) {
 }
 
 export default class TableIndex<ValueType> {
-    table: MemoryTable
+    table: Table
     attrSet: AttrSet
     attrs: string[]
     data = new Map<string, Map<any,any>>()
 
-    constructor(table: MemoryTable, attrs: LooseAttrList) {
+    constructor(table: Table, attrs: LooseAttrList) {
         this.table = table;
 
         if (!Array.isArray(attrs))

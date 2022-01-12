@@ -2,6 +2,7 @@
 import { t_space } from './tokens'
 import { Token } from '.'
 import TokenDef from './TokenDef'
+import { LexerSettings } from './LexerSettings'
 
 const c_newline = '\n'.charCodeAt(0);
 
@@ -20,12 +21,14 @@ export default class Context {
     leadingIndent = 0
     resultTokens: Token[] = []
     bracketStack: BracketFrame[] = []
+    settings: LexerSettings
 
-    constructor(str: string) {
+    constructor(str: string, settings: LexerSettings) {
         if (typeof str !== 'string')
             throw new Error('expected string, saw: ' + str);
 
         this.str = str;
+        this.settings = settings;
     }
 
     finished(lookahead: number = 0) : boolean {

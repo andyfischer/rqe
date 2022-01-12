@@ -1,7 +1,8 @@
 
 import { Setup } from './Setup'
 import { Graph } from './Graph'
-import { MountPoint } from './Mounts'
+import { MountPoint } from './MountPoint'
+import { Step } from './Step'
 
 interface FunctionDecl {
     name: string
@@ -37,65 +38,82 @@ export function quickMountJavascriptFunction(setup: Setup, func: Function) {
         attrs[argName] = {};
     }
 
-    setup.mount({
-        name: `quick_mount_${name}`,
-        attrs,
-    })
-    .get(p => {
-        const argValues = decl.argNames.map(name => p.get(name));
+    function run(step: Step) {
+        const argValues = decl.argNames.map(name => step.get(name));
         const output = func.apply(null, argValues);
 
         if (output && output.then) {
             // Async
-            p.async();
+            step.async();
 
             return output.then(result => {
-                p.put({[name]: result});
-                p.done();
+                step.put({[name]: result});
+                step.done();
             });
         } else {
             // Sync
-            p.put({[name]: output});
+            step.put({[name]: output});
         }
+    }
+
+    setup.bind({
+        name: `quick_mount_${name}`,
+        attrs,
+        run,
     });
 }
 
 export function javascriptQuickMountIntoGraph(graph: Graph, func: Function): MountPoint {
-    const existing = getGraphAssociatedData(graph, func, 'jsQuickMount');
+    const existing = getMetadataForGraph(graph, func, 'jsQuickMount');
     if (existing)
         return existing;
 
     const module = graph.createModule(setup => quickMountJavascriptFunction(setup, func));
 
-    if (module.tables.length !== 1)
+    if (module.points.length !== 1)
         throw new Error('javascriptQuickMountIntoGraph internal error: got more than one table');
 
-    const table = module.tables[0];
-
-    setGraphAssociatedData(graph, func, 'jsQuickMount', table);
-    return table;
+    const point = module.points[0];
+    setMetadataForGraph(graph, func, 'jsQuickMount', point);
+    return point;
 }
 
-export function getGraphAssociatedData(graph: Graph, obj: any, field: string) {
+export function setObjectMetadata(obj: any, field: string, value: any) {
+    obj['.arqe'] = obj['.arqe'] || new Map();
+
+    const arqeData: Map<string,any> = obj['.arqe'];
+
+    arqeData.set(field, value);
+}
+
+export function getObjectMetadata(obj: any, field: string) {
     if (!obj['.arqe'])
         return null;
 
     const arqeData: Map<string,any> = obj['.arqe'];
 
-    const graphData = arqeData.get(graph.graphId);
-    if (!graphData)
+    return arqeData.get(field);
+}
+
+export function getMetadataForGraph(graph: Graph, obj: any, field: string) {
+
+    const forGraph = getObjectMetadata(obj, `graph-${graph.graphId}`);
+
+    if (!forGraph)
         return null;
 
-    return graphData.get(field);
+    return forGraph.get(field);
 }
 
-export function setGraphAssociatedData(graph: Graph, obj: any, field: string, value: any) {
-    obj['.arqe'] = obj['.arqe'] || new Map();
+export function setMetadataForGraph(graph: Graph, obj: any, field: string, value: any) {
 
-    const arqeData: Map<string,any> = obj['.arqe'];
+    let forGraph = getObjectMetadata(obj, `graph-${graph.graphId}`);
 
-    if (!arqeData.has(graph.graphId))
-        arqeData.set(graph.graphId, new Map());
+    if (!forGraph) {
+        forGraph = new Map();
+        setObjectMetadata(obj, `graph-${graph.graphId}`, forGraph);
+    }
 
-    arqeData.get(graph.graphId).set(field, value);
+    forGraph.set(field, value);
 }
+

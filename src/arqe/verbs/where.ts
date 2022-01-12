@@ -1,11 +1,11 @@
 
-import Params from '../Params'
+import { Step } from '../Step'
 import { TransformFunc, transformAsVerb } from './_shared'
 import { Item, has, get } from '../Item'
 
 type Args = any;
 
-function where(item: Item, args: any): Item[] {
+function run(item: Item, args: any): Item[] {
 
     for (const [ key, value ] of Object.entries(args)) {
 
@@ -19,6 +19,4 @@ function where(item: Item, args: any): Item[] {
     return [item];
 }
 
-const whereVerb = transformAsVerb<Args>(where, params => params.queryToItem());
-
-export default whereVerb;
+export const where = transformAsVerb<Args>(run, params => params.queryToItem());

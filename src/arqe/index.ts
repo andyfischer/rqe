@@ -1,10 +1,9 @@
 
 export { Graph } from './Graph'
-export type { QueryLike } from './Query'
 export { Stream } from './Stream'
-export { MemoryTable } from './MemoryTable'
-export type { Table } from './Table'
+export { Table } from './Table'
 export { Setup } from './Setup'
-export { newTable } from './globalGraph'
-export { newTable as table } from './globalGraph'
+export { Query } from './Query'
 export { newDebouncedTable } from './reactive/debounced'
+
+export type { QueryLike } from './Query'

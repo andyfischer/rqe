@@ -2,23 +2,29 @@
 import { Token, LexedText, t_space, t_newline, t_ident } from '.'
 import SourcePos from './SourcePos'
 import TokenDef from './TokenDef'
+import { LexerSettings } from './LexerSettings'
 
-export default class TokenIterator {
+export class TokenIterator {
 
     position: number = 0
     tokens: Token[]
-    result?: LexedText
+    sourceText?: LexedText
+    settings: LexerSettings
 
-    constructor(tokens: Token[]) {
+    constructor(tokens: Token[], settings: LexerSettings = {}) {
         this.tokens = tokens;
-    }
-
-    discardSpaces() {
-        this.tokens = this.tokens.filter(token => token.match !== t_space);
+        this.settings = settings;
     }
 
     getPosition() {
         return this.position;
+    }
+
+    copy() {
+        const it = new TokenIterator(this.tokens);
+        it.position = this.position;
+        it.sourceText = this.sourceText;
+        return it;
     }
 
     next(lookahead: number = 0): Token {
@@ -73,7 +79,7 @@ export default class TokenIterator {
 
     nextText(lookahead: number = 0): string {
         const token = this.next(lookahead);
-        return this.result.getTokenText(token);
+        return this.sourceText.getTokenText(token);
     }
 
     nextIsIdentifier(str: string, lookahead: number = 0): boolean {
@@ -82,7 +88,7 @@ export default class TokenIterator {
 
     nextUnquotedText(lookahead: number = 0): string {
         const token = this.next(lookahead);
-        return this.result.getUnquotedText(token);
+        return this.sourceText.getUnquotedText(token);
     }
 
     nextLength(lookahead: number = 0): number {
@@ -94,11 +100,32 @@ export default class TokenIterator {
         return (this.position + lookahead) >= this.tokens.length;
     }
 
+    advance() {
+        this.position += 1;
+
+        if (this.settings.autoSkipSpaces) {
+            this.skipSpaces();
+        }
+    }
+
+    jumpTo(pos: number) {
+        this.position = pos;
+
+        if (this.settings.autoSkipSpaces) {
+            this.skipSpaces();
+        }
+    }
+
     consume(match: TokenDef = null) {
         if (match !== null && !this.nextIs(match))
-            throw new Error(`consume expected match: ${match.name}, found match: ${this.next().match.name}`);
+            throw new Error(`expected token: ${match.name}, found: ${this.next().match.name}`);
 
-        this.position += 1;
+        this.advance();
+    }
+
+    consumeWhile(condition: (next: Token) => boolean) {
+        while (!this.finished() && condition(this.next()))
+            this.advance();
     }
 
     consumeIdentifier(s: string) {
@@ -106,31 +133,30 @@ export default class TokenIterator {
             throw new Error(`consume expected identifier: "${s}, found: ${this.nextText()}`);
         }
 
-        this.position += 1;
+        this.advance();
     }
 
-    consumeNextText(lookahead: number = 0): string {
+    consumeAsText(lookahead: number = 0): string {
         const str = this.nextText(lookahead);
         this.consume();
         return str;
     }
 
-    consumeNextUnquotedText(lookahead: number = 0): string {
+    consumeAsUnquotedText(lookahead: number = 0): string {
         const str = this.nextUnquotedText(lookahead);
         this.consume();
         return str;
     }
 
-
-    consumeTextWhile(condition: (next: Token) => boolean) {
+    consumeAsTextWhile(condition: (next: Token) => boolean) {
         let str = '';
         let stuckCounter = 0;
 
         while (!this.finished() && condition(this.next())) {
-            str += this.consumeNextText();
+            str += this.consumeAsText();
             stuckCounter += 1;
             if (stuckCounter > 10000) {
-                throw new Error("infinite loop in consumeTextWhile?")
+                throw new Error("infinite loop in consumeAsTextWhile?")
             }
         }
 
@@ -161,6 +187,18 @@ export default class TokenIterator {
             this.consume(t_space);
     }
 
+    lookaheadSkipSpaces(lookahead: number = 0) {
+        while (this.nextIs(t_space, lookahead))
+            lookahead++;
+        return lookahead;
+    }
+
+    lookaheadAdvance(lookahead: number) {
+        lookahead++;
+        if (this.nextIs(t_space, lookahead))
+            lookahead++;
+    }
+
     consumeSpace() {
         while (this.nextIs(t_space))
             this.consume(t_space);
@@ -187,6 +225,6 @@ export default class TokenIterator {
         const startToken = this.tokens[startPos];
         const endToken = this.tokens[endPos];
 
-        return this.result.originalStr.slice(startToken.startPos, endToken.endPos);
+        return this.sourceText.originalStr.slice(startToken.startPos, endToken.endPos);
     }
 }

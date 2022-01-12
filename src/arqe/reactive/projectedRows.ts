@@ -1,28 +1,45 @@
 
-import { MemoryTable as Table } from '../MemoryTable'
+import { Table } from '../Table'
 import { QueryLike, toQuery } from '../Query'
 import { TransformQuery, LooseTransformQuery, toTransformQuery, applyTransform } from '../Transform'
+import { c_item } from '../Enums'
 
 export function linkProjectedRows(fromTable: Table, queryLike: QueryLike, toTable: Table) {
 
-    const query = toQuery(queryLike);
     const graph = fromTable.graph;
+    const query = toQuery(queryLike, { graph, expectTransform: true });
 
-    for (const item of fromTable.scan()) {
-        // PERFORMANCE TODO: Could call applyTransform in a batch here.
-        for (const translatedItem of applyTransform(graph, [item], query))
-            toTable.put(translatedItem);
-    }
+    applyTransform(graph, fromTable.list(), query)
+    .sendTo({
+        receive(msg) {
+            switch (msg.t) {
+            case c_item:
+                toTable.put(msg.item);
+            }
+        }
+    });
 
     fromTable.addChangeListener(evt => {
         if (evt.verb === 'put') {
-            for (const translatedItem of applyTransform(graph, [evt.item], query)) {
-                toTable.put(translatedItem);
-            }
+            applyTransform(graph, [evt.item], query)
+            .sendTo({
+                receive(msg) {
+                    switch (msg.t) {
+                    case c_item:
+                        toTable.put(msg.item);
+                    }
+                }
+            });
         } else if (evt.verb === 'delete') {
-            for (const translatedItem of applyTransform(graph, [evt.item], query)) {
-                toTable.delete(translatedItem);
-            }
+            applyTransform(graph, [evt.item], query)
+            .sendTo({
+                receive(msg) {
+                    switch (msg.t) {
+                    case c_item:
+                        toTable.delete(msg.item);
+                    }
+                }
+            });
         }
     });
 }

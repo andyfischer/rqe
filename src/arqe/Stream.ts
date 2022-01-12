@@ -1,7 +1,8 @@
 
 import { Item } from './Item'
-import { MemoryTable } from './MemoryTable'
+import { Table } from './Table'
 import { c_done, c_item } from './Enums'
+import { ErrorItem, ErrorType } from './Errors'
 
 interface PipeItem {
     t: 'item',
@@ -12,21 +13,9 @@ interface PipeDone {
     t: 'done',
 }
 
-export type WarningType = 'NoTableFound' | 'Unimplemented' | 'TableNotFound'
-    | 'MissingAttrs' | 'MissingValue' | 'NotSupported' | 'ExtraAttrs'
-
-export type ErrorType = 'UnhandledError'
-
-export interface PipeWarning {
-    t: 'warn',
-    warningType: WarningType
-    message?: string
-}
-
 export interface PipeError {
     t: 'error',
-    message: string
-    stack?: any
+    item: ErrorItem
 }
 
 export interface PipeHeader {
@@ -34,7 +23,7 @@ export interface PipeHeader {
     item: Item
 }
 
-export type PipedData = PipeHeader | PipeItem | PipeDone | PipeError | PipeWarning
+export type PipedData = PipeHeader | PipeItem | PipeDone | PipeError 
 
 export interface PipeReceiver {
     receive(data: PipedData): void
@@ -128,17 +117,17 @@ export class Stream {
     }
 
     // Use as a Promise
-    then(onResolve?: (result: MemoryTable) => any, onReject?): Promise<MemoryTable> {
-        let promise = new Promise<MemoryTable>(resolve => this.callback(resolve));
+    then(onResolve?: (result: Table) => any, onReject?): Promise<Table> {
+        let promise = new Promise<Table>(resolve => this.callback(resolve));
         if (onResolve || onReject)
             promise = promise.then(onResolve, onReject);
 
         return promise;
     }
 
-    callback(callback: (rel: MemoryTable) => void) {
+    callback(callback: (rel: Table) => void) {
 
-        const result = new MemoryTable({
+        const result = new Table({
             name: 'QueryResult'
         });
 
@@ -154,11 +143,8 @@ export class Stream {
                 case 'item':
                     result.put(data.item);
                     break;
-                case 'warn':
-                    result._warnings.push(data);
-                    break;
                 case 'error':
-                    result._errors.push(data);
+                    result.putError(data.item);
                     break;
                 case 'done':
                     hasCalledDone = true;
@@ -174,15 +160,21 @@ export class Stream {
         });
     }
 
-    sync(): MemoryTable {
-        let out: MemoryTable;
+    sync(): Table {
+        let out: Table;
 
         this.callback(r => { out = r });
 
-        if (out === null)
+        if (out == null)
             throw new Error("Stream didn't finish synchronously");
 
         return out;
+    }
+
+    // Consume this stream as a sync iterator.
+    *[Symbol.iterator]() {
+        const table = this.sync();
+        yield* table.scan();
     }
     
     // Consume this stream as an async iterator.
@@ -249,35 +241,37 @@ export class Stream {
         this.receive({ t: 'item', item });
     }
 
-    putTableItems(table: MemoryTable) {
+    putError(item: ErrorItem) {
+        this.receive({ t: 'error', item });
+    }
+
+    putTableItems(table: Table) {
         for (const item of table.scan())
             this.put(item);
     }
 
-    sendWarning(type: WarningType, message?: string) {
-        this.receive({ t: 'warn', warningType: type, message });
-    }
-
     sendError(type: ErrorType, data?: any) {
-        this.receive({ t: 'error', errorType: type, ...data });
+        this.receive({ t: 'error', item: { errorType: type, ...data } });
     }
 
     sendUnhandledError(error: Error) {
-        this.sendError('UnhandledError', { message: error.message, stack: error.stack });
+        console.error(error);
+        this.sendError('unhandled_error', { message: error.message, stack: error.stack });
     }
 
     closeWithError(message: string) {
-        this.receive({t: 'error', message});
+        this.receive({t: 'error', item: { errorType: 'unhandled_error', message }});
         this.receive({t: 'done'});
     }
 
     closeWithUnhandledError(e: Error) {
+        console.error(e);
         if (this.receivedDone) {
             console.error("Tried to close pipe with error, but pipe is already closed. Error: ", e.stack || e);
             return;
         }
 
-        this.receive({t: 'error', message: e.message || e.toString(), stack: e.stack });
+        this.receive({t: 'error', item: { errorType: 'unhandled_error', message: e.message || e.toString(), stack: e.stack } });
         this.receive({t: 'done'});
     }
 
@@ -296,6 +290,14 @@ export class Stream {
     
     static newEmptyStream() {
         const stream = new Stream();
+        stream.done();
+        return stream;
+    }
+
+    static fromList(items: Item[]) {
+        const stream = new Stream();
+        for (const item of items)
+            stream.put(item);
         stream.done();
         return stream;
     }

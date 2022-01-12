@@ -1,23 +1,25 @@
 
-import { randomHex } from '../utils'
+import { randomHex } from '../utils/randomHex'
 import { TableSchema, OnDeleteOption, OnConflictOption, Reference,
     AttrGenerationMethod } from '../Schema'
 import { Graph } from '../Graph'
-import { Table, ItemChangeListener } from '../Table'
-import { fixLooseSchema, findUniqueAttr, LooseTableSchema, IndexConfigurationObject } from '../Schema'
+import { ItemChangeListener } from '../reactive/ItemChangeEvent'
+import { fixLooseSchema, findUniqueAttr, LooseTableSchema, IndexConfiguration } from '../Schema'
 import TableIndex from './TableIndex'
 import { IDSourceNumber as IDSource } from '../utils/IDSource'
 import { formatItem } from '../formatToString'
 import { assert } from '../utils/assert'
 import { platformExtendClass } from './platform'
-import { PipeError, PipeWarning } from '../Stream'
-import { Table as TableInterface } from '../Table'
+import { PipeError } from '../Stream'
 import { MemoryTableExtraErrorMessages } from '../config'
+import { ErrorItem, ErrorTableSchema, newErrorTable } from '../Errors'
+import { parseTableDecl } from '../parser'
+import { tableToString } from '../Debug'
 
 const ConfigFrequentValidation = true;
 
 interface ObjectHeader {
-    table: MemoryTable
+    table: Table
     tableInternalKey: number
     globalId?: string
     referencers?: Map<string, RowReference>
@@ -60,10 +62,10 @@ export type AttrSet = Map<string, true>;
 export type LooseAttrList = string | string[]
 type AttrType = ReferenceType
 
-interface UniquenessConstraint<ValueType> {
+interface UniquenessConstraint<ItemType> {
     constraintType: 'unique'
     onConflict: OnConflictOption
-    index: TableIndex<ValueType>
+    index: TableIndex<ItemType>
 }
 
 interface RequiredAttrConstraint {
@@ -71,7 +73,7 @@ interface RequiredAttrConstraint {
     attr: string
 }
 
-type Constraint<ValueType> = UniquenessConstraint<ValueType> | RequiredAttrConstraint
+type Constraint<ItemType> = UniquenessConstraint<ItemType> | RequiredAttrConstraint
 
 interface GeneratedValue {
     attr: string
@@ -82,7 +84,7 @@ interface GeneratedValue {
 }
 
 interface ReferenceType {
-    table: MemoryTable
+    table: Table
 }
 
 interface Filter {
@@ -167,27 +169,27 @@ function listToMap(list: string[]) {
 interface SetupOptions {
     name?: string
     graph?: Graph
+    tableId?: string
 }
 
-export class MemoryTable<ValueType = any> implements TableInterface {
+export class Table<ItemType = any> {
 
     _name: string
     graph: Graph
     tableId: string
 
-    nextInternalID = new IDSource()
-
-    items = new Map<number, ValueType>()
-    _warnings: PipeWarning[] = []
-    _errors: PipeError[] = []
-    constraints: Constraint<ValueType>[] = []
+    indexes: TableIndex<ItemType>[] = []
+    indexesBySingleAttr = new Map<string, TableIndex<ItemType>>()
+    constraints: Constraint<ItemType>[] = []
     generatedValues: GeneratedValue[] = []
     _schema: TableSchema
-    indexes: TableIndex<ValueType>[] = []
-    indexesBySingleAttr = new Map<string, TableIndex<ValueType>>()
     references: Reference[] = []
     itemChangeListeners?: ItemChangeListener[]
     primaryUniqueAttr?: string
+
+    nextInternalID = new IDSource()
+    items = new Map<number, ItemType>()
+    _errors: Table<ErrorItem>
 
     constructor(looseSchema: LooseTableSchema, setupOptions: SetupOptions = {}) {
         const schema = fixLooseSchema(looseSchema);
@@ -195,9 +197,7 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         this._name = (setupOptions && setupOptions.name) || schema.name;
         this.graph = (setupOptions && setupOptions.graph);
         this._schema = schema;
-
-        if (this.graph)
-            this.tableId = this.graph.nextTableId.take();
+        this.tableId = setupOptions.tableId;
 
         for (const [attr, attrConfig] of Object.entries(schema.attrs || {})) {
             if (attrConfig.index) {
@@ -252,8 +252,27 @@ export class MemoryTable<ValueType = any> implements TableInterface {
             this.references.push(foreignKeyConfig);
         }
 
+        for (const funcDecl of schema.funcs || []) {
+            const parsed = parseTableDecl(funcDecl);
+            if (parsed.t === 'parseError')
+                throw new Error("Error parsing decl: " + parsed);
+
+            const attrs = [];
+            for (const [ attr, config ] of Object.entries(parsed.attrs))
+                if (config.required)
+                    attrs.push(attr);
+
+            this._newIndex({
+                attrs
+            });
+        }
+
         const [ primaryUniqueAttr, _] = findUniqueAttr(schema);
         this.primaryUniqueAttr = primaryUniqueAttr;
+
+        for (const item of (schema.initialItems || [])) {
+            this.put(item as ItemType);
+        }
     }
 
     getEffectiveAttrs(): string[] {
@@ -265,8 +284,8 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         return Object.keys(attrs);
     }
 
-    _newIndex(config: IndexConfigurationObject) {
-        const index = new TableIndex<ValueType>(this, config.attrs);
+    _newIndex(config: IndexConfiguration) {
+        const index = new TableIndex<ItemType>(this, config.attrs);
         this.indexes.push(index);
 
         if (index.attrs.length === 1)
@@ -296,7 +315,7 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         return this.items.size;
     }
 
-    itemToKey(item: ValueType) {
+    itemToKey(item: ItemType) {
         if (this.primaryUniqueAttr) {
             return { [this.primaryUniqueAttr]: item[this.primaryUniqueAttr] }
         }
@@ -334,7 +353,7 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         return this;
     }
 
-    addForeignKey(attr: string, table: MemoryTable, foreignAttr: string, onDelete: OnDeleteOption) {
+    addForeignKey(attr: string, table: Table, foreignAttr: string, onDelete: OnDeleteOption) {
         if (!table.hasIndexForAttrs([foreignAttr])) {
             throw this.usageError(`can't addForeignKey, no index for: ${foreignAttr}`);
         }
@@ -367,7 +386,7 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         return false;
     }
 
-    _beforePut(item: ValueType) {
+    _beforePut(item: ItemType) {
         for (const generatedId of this.generatedValues) {
             if (item[generatedId.attr])
                 continue;
@@ -392,12 +411,12 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         }
     }
 
-    prepare(newValue?: ValueType): ValueType {
+    prepare(newValue?: ItemType): ItemType {
         this._beforePut(newValue || ({} as any));
         return newValue;
     }
 
-    put(newItem: ValueType, putInfo?: any): ValueType {
+    put(newItem: ItemType, putInfo?: any): ItemType {
 
         if (header(newItem) && header(newItem).table)
             newItem = withoutHeader(newItem);
@@ -542,12 +561,18 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         return newItem;
     }
 
-    putItems(items: ValueType[]) {
+    putItems(items: ItemType[]) {
         for (const item of items)
             this.put(item);
     }
 
-    *where(where: any): IterableIterator<ValueType> {
+    putError(item: ErrorItem) {
+        if (!this._errors)
+            this._errors = newErrorTable();
+        this._errors.put(item);
+    }
+
+    *where(where: any): IterableIterator<ItemType> {
         // Check if this has no clause.
         if (!where) {
             yield* this.scan();
@@ -589,7 +614,7 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         throw this.usageError(message);
     }
 
-    getOneByAttrValue(attr: string, value: any): ValueType {
+    getOneByAttrValue(attr: string, value: any): ItemType {
         const index = this.indexesBySingleAttr.get(attr);
         if (!index)
             throw this.usageError("can't getOneByAttrValue, no index for: " + attr);
@@ -600,21 +625,29 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         return index.getOne(key);
     }
 
-    getOne(where: any): ValueType | null {
+    getOne(where: any): ItemType | null {
         for (const found of this.where(where)) {
-            return found as any as ValueType;
+            return found as any as ItemType;
         }
 
         return null;
     }
 
-    list(): ValueType[] {
+    size() {
+        return this.items.size;
+    }
+
+    list(): ItemType[] {
         return Array.from(this.items.values());
+    }
+
+    *[Symbol.iterator]() {
+        yield* this.scan();
     }
 
     *scan() {
         for (const item of this.items.values()) {
-            yield (item as any as ValueType)
+            yield (item as any as ItemType)
         }
     }
 
@@ -644,7 +677,7 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         return Array.from(this.column(attr));
     }
 
-    one(where?: any): ValueType | null {
+    one(where?: any): ItemType | null {
         if (!where) {
             for (const item of this.scan())
                 return item;
@@ -656,14 +689,17 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         return null;
     }
 
-    listWhere(where: any): ValueType[] {
+    listWhere(where: any): ItemType[] {
         return Array.from(this.where(where));
     }
 
     strs() {
         const out: string[] = [];
-        for (const warning of this._warnings) {
-            out.push(`#warning ${warning.warningType}${warning.message ? (' ' + warning.message) : ''}`);
+
+        if (this.hasError()) {
+            for (const error of this._errors.scan()) {
+                out.push(`#error ${error.errorType}${error.message ? (' ' + error.message) : ''}`);
+            }
         }
 
         for (const item of this.scan())
@@ -680,7 +716,7 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         return out;
     }
 
-    _deleteOne(item: ValueType, changeInfo?: any) {
+    _deleteOne(item: ItemType, changeInfo?: any) {
 
         const itemHeader = header(item);
 
@@ -723,9 +759,8 @@ export class MemoryTable<ValueType = any> implements TableInterface {
         }
 
         if (this.itemChangeListeners) {
-            const toKey = this.itemToKey(item);
             for (const listener of (this.itemChangeListeners || [])) {
-                listener({ verb: 'delete', item: toKey, writer: changeInfo && changeInfo.writer });
+                listener({ verb: 'delete', item, writer: changeInfo && changeInfo.writer });
             }
         }
 
@@ -774,17 +809,25 @@ export class MemoryTable<ValueType = any> implements TableInterface {
     }
     
     hasError() {
-        return this._errors.length > 0;
+        return this._errors && this._errors.count() > 0;
     }
 
-    warnings() {
-        return this._warnings;
-    }
-
-    errors() {
+    errors(): Table<ErrorItem> {
         return this._errors;
+    }
+
+    errorsToException() {
+        return new Error("errors: " + this._errors.list());
+    }
+
+    str() {
+        return tableToString(this);
     }
 }
 
-platformExtendClass(MemoryTable);
+platformExtendClass(Table);
+
+// next up for Table:
+//  - if we access for [a,b] and there's an index for [a] then use it.
+//  - finding an index is complicated: allow for separete steps: find the appropriate index, then use it.
 

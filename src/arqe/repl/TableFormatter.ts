@@ -59,7 +59,9 @@ export function updateStateForItems(state: TableFormatState, items: FormattedIte
     // Add any new attrs and update highestObservedWidth.
 
     for (const item of items) {
-        for (const [ attr, str ] of item.cells.entries()) {
+        for (let [ attr, str ] of item.cells.entries()) {
+            attr = attr || '';
+            str = str || '';
 
             const width = Math.max(str.length, attr.length);
 

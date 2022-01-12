@@ -1,5 +1,5 @@
 
-import Params from '../Params'
+import { Step } from '../Step'
 import { TransformFunc, transformAsVerb } from './_shared'
 import { Item, has, get } from '../Item'
 
@@ -8,7 +8,7 @@ interface Args {
     to: string
 }
 
-const rename: TransformFunc<Args> = (item: Item, args: Args) => {
+const run: TransformFunc<Args> = (item: Item, args: Args) => {
     if (has(item, args.from)) {
         const val = get(item, args.from);
 
@@ -26,9 +26,7 @@ const rename: TransformFunc<Args> = (item: Item, args: Args) => {
     }
 };
 
-const renameVerb = transformAsVerb<Args>(rename, (params: Params) => {
+export const rename = transformAsVerb<Args>(run, (params: Step) => {
     const args = params.queryToItem();
     return { from: args.from, to: args.to };
 });
-
-export default renameVerb;

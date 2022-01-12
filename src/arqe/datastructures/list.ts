@@ -1,8 +1,8 @@
 
 import { Setup } from '../Setup'
-import Params from '../Params'
-import { MemoryTable } from '../MemoryTable'
-import { mountTable } from '../MemoryTable/mountTable'
+import { Step } from '../Step'
+import { Table } from '../Table'
+import { mountTable } from '../Table/mountTable'
 import { Item } from '../Item'
 
 interface AttrConfig {
@@ -22,7 +22,7 @@ function getEffectiveAttrs(items: Item[]): string[] {
     return Object.keys(attrs);
 }
 
-export function mountList(setup: Setup, config: ListMountConfig) {
+export function setupList(setup: Setup, config: ListMountConfig) {
     const { items } = config;
 
     let attrs = config.attrs;
@@ -34,7 +34,7 @@ export function mountList(setup: Setup, config: ListMountConfig) {
         }
     }
 
-    const table = new MemoryTable({ attrs });
+    const table = new Table({ attrs });
     for (const item of config.items)
         table.put(item);
 

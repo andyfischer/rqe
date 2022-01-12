@@ -1,6 +1,6 @@
 
 import { Setup } from '../Setup'
-import Params from '../Params'
+import { Step } from '../Step'
 import { MountSpec, setupWithMountSpec } from '../Schema'
 
 export interface ObjectMountConfig {
@@ -11,7 +11,7 @@ export interface ObjectMountConfig {
     name?: string
 }
 
-export function mountObject(setup: Setup, config: ObjectMountConfig) {
+export function setupObject(setup: Setup, config: ObjectMountConfig) {
     const { object, keyAttr, valueAttr } = config;
     if (config.mount)
         setup = setupWithMountSpec(config.mount, setup);
@@ -21,7 +21,7 @@ export function mountObject(setup: Setup, config: ObjectMountConfig) {
     if (config.name)
         table.tableName(config.name);
 
-    table.get((params: Params) => {
+    table.run((params: Step) => {
 
         if (params.hasValue(keyAttr)) {
             const key = params.get(keyAttr);

@@ -1,14 +1,18 @@
 
-import Params from '../Params'
+import { Step } from '../Step'
 import * as fs from 'fs'
 import { formatAsCsv } from '../format/csv'
 
-export default function saveToCsv(params: Params) {
-    const { filename } = params.queryToItem();
+function prepare(step: Step) {
+    // TODO
+}
+
+function run(step: Step) {
+    const { filename } = step.queryToItem();
     if (!filename)
         throw new Error('save_to_csv requires: filename');
 
-    params.input.then(result => {
+    step.input.then(result => {
 
         const out = fs.createWriteStream(filename);
         
@@ -21,6 +25,12 @@ export default function saveToCsv(params: Params) {
 
         out.end();
 
-        params.output.done();
+        step.output.done();
     });
 }
+
+export const save_to_csv = {
+    prepare,
+    run,
+}
+
