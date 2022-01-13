@@ -10,7 +10,7 @@ function prepare(step: Step, block: Block) {
 
     step.put(tagsToItem(step.tags));
 
-    prepareTableSearch(step, block.namedInput('step'), block);
+    prepareTableSearch(step.graph, step, block.namedInput('step'), block);
 }
 
 export const get = {

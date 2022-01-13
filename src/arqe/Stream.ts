@@ -1,6 +1,6 @@
 
 import { Item } from './Item'
-import { Table } from './Table'
+import { Table } from './Table/index'
 import { c_done, c_item } from './Enums'
 import { ErrorItem, ErrorType } from './Errors'
 
@@ -118,14 +118,22 @@ export class Stream {
 
     // Use as a Promise
     then(onResolve?: (result: Table) => any, onReject?): Promise<Table> {
-        let promise = new Promise<Table>(resolve => this.callback(resolve));
+        let promise = new Promise<Table>((resolve, reject) => {
+            this.callback(table => {
+                if (table.hasError())
+                    reject(table.errorsToException());
+                else
+                    resolve(table);
+            });
+        });
+
         if (onResolve || onReject)
             promise = promise.then(onResolve, onReject);
 
         return promise;
     }
 
-    callback(callback: (rel: Table) => void) {
+    callback(callback: (table: Table) => void) {
 
         const result = new Table({
             name: 'QueryResult'
@@ -160,13 +168,17 @@ export class Stream {
         });
     }
 
-    sync(): Table {
+    sync(opts?: {throwError?: boolean}): Table {
         let out: Table;
+        const throwError = opts && opts.throwError;
 
         this.callback(r => { out = r });
 
         if (out == null)
             throw new Error("Stream didn't finish synchronously");
+
+        if (throwError !== false)
+            out.throwErrors();
 
         return out;
     }
@@ -255,7 +267,7 @@ export class Stream {
     }
 
     sendUnhandledError(error: Error) {
-        console.error(error);
+        // console.error(error);
         this.sendError('unhandled_error', { message: error.message, stack: error.stack });
     }
 
@@ -265,7 +277,8 @@ export class Stream {
     }
 
     closeWithUnhandledError(e: Error) {
-        console.error(e);
+        // console.error(e);
+
         if (this.receivedDone) {
             console.error("Tried to close pipe with error, but pipe is already closed. Error: ", e.stack || e);
             return;

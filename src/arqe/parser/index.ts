@@ -1,4 +1,4 @@
 
 export { parseQuery } from './parseQuery'
-export { parseQueryTuple } from './parseQueryTuple'
+export { parseQueryTuple, parseQueryTupleWithErrorCheck } from './parseQueryTuple'
 export { parseTableDecl } from './parseTableDecl'

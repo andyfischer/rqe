@@ -2,54 +2,24 @@
 import { randomHex } from '../utils/randomHex'
 import { TableSchema, OnDeleteOption, OnConflictOption, Reference,
     AttrGenerationMethod } from '../Schema'
-import { Graph } from '../Graph'
+import { Graph, QueryExecutionContext } from '../Graph'
 import { ItemChangeListener } from '../reactive/ItemChangeEvent'
 import { fixLooseSchema, findUniqueAttr, LooseTableSchema, IndexConfiguration } from '../Schema'
 import TableIndex from './TableIndex'
 import { IDSourceNumber as IDSource } from '../utils/IDSource'
 import { formatItem } from '../formatToString'
 import { assert } from '../utils/assert'
-import { platformExtendClass } from './platform'
 import { PipeError } from '../Stream'
 import { MemoryTableExtraErrorMessages } from '../config'
-import { ErrorItem, ErrorTableSchema, newErrorTable } from '../Errors'
+import { ErrorItem, ErrorTableSchema, newErrorTable, errorItemToString } from '../Errors'
 import { parseTableDecl } from '../parser'
 import { tableToString } from '../Debug'
+import { ObjectHeader, initRowInfo, withoutHeader, clearHeader, header, itemGlobalId } from './ObjectHeader'
+import { UniquenessConstraint, RequiredAttrConstraint, Constraint } from './Constraints'
+import { QueryLike } from '../Query'
+import { Stream } from '../Stream'
 
 const ConfigFrequentValidation = true;
-
-interface ObjectHeader {
-    table: Table
-    tableInternalKey: number
-    globalId?: string
-    referencers?: Map<string, RowReference>
-}
-
-interface RowReference {
-    value: any
-    attr: string
-    onDelete: OnDeleteOption
-}
-
-function initRowInfo(object: any, rowinfo: ObjectHeader) {
-    // by using defineProperty, this 'secret' property won't show up in Object.keys() or JSON.stringify()
-    Object.defineProperty(object, 'rowinfo', { value: 'static', writable: true });
-    object.rowinfo = rowinfo;
-}
-
-function withoutHeader(object: any) {
-    return {
-        ...object,
-    }
-}
-
-function clearHeader(object: any) {
-    object.rowinfo = {} as any;
-}
-
-export function header(object: any): ObjectHeader {
-    return object.rowinfo;
-}
 
 function* iteratorMap<I,O>(it: Iterable<I>, callback: (val: I) => O) {
     for (const item of it)
@@ -60,20 +30,6 @@ type ConstraintType = 'unique'
 export type AttrMap = Map<string, any>;
 export type AttrSet = Map<string, true>;
 export type LooseAttrList = string | string[]
-type AttrType = ReferenceType
-
-interface UniquenessConstraint<ItemType> {
-    constraintType: 'unique'
-    onConflict: OnConflictOption
-    index: TableIndex<ItemType>
-}
-
-interface RequiredAttrConstraint {
-    constraintType: 'required_attr'
-    attr: string
-}
-
-type Constraint<ItemType> = UniquenessConstraint<ItemType> | RequiredAttrConstraint
 
 interface GeneratedValue {
     attr: string
@@ -94,15 +50,6 @@ interface Filter {
 interface WhereCondition {
     attr: string
     value: any
-}
-
-export function itemGlobalId(header: ObjectHeader) {
-    if (header.globalId)
-        return header.globalId;
-
-    const globalId = header.table.name() + '/' + header.tableInternalKey;
-    header.globalId = globalId;
-    return globalId;
 }
 
 function parseAttrList(attrSet: LooseAttrList): Map<string, true> {
@@ -167,22 +114,19 @@ function listToMap(list: string[]) {
 }
 
 interface SetupOptions {
-    name?: string
-    graph?: Graph
     tableId?: string
 }
 
 export class Table<ItemType = any> {
 
-    _name: string
-    graph: Graph
+    name: string
     tableId: string
 
     indexes: TableIndex<ItemType>[] = []
     indexesBySingleAttr = new Map<string, TableIndex<ItemType>>()
     constraints: Constraint<ItemType>[] = []
     generatedValues: GeneratedValue[] = []
-    _schema: TableSchema
+    schema: TableSchema
     references: Reference[] = []
     itemChangeListeners?: ItemChangeListener[]
     primaryUniqueAttr?: string
@@ -194,12 +138,17 @@ export class Table<ItemType = any> {
     constructor(looseSchema: LooseTableSchema, setupOptions: SetupOptions = {}) {
         const schema = fixLooseSchema(looseSchema);
 
-        this._name = (setupOptions && setupOptions.name) || schema.name;
-        this.graph = (setupOptions && setupOptions.graph);
-        this._schema = schema;
+        // Freeze incoming schema object.
+        Object.freeze(schema.funcs);
+        Object.freeze(schema);
+
+        this.name = schema.name;
+        this.schema = schema;
         this.tableId = setupOptions.tableId;
 
         for (const [attr, attrConfig] of Object.entries(schema.attrs || {})) {
+            Object.freeze(attrConfig);
+
             if (attrConfig.index) {
                 this._newIndex({ attrs: [attr] });
             }
@@ -238,6 +187,8 @@ export class Table<ItemType = any> {
         }
 
         for (const indexConfig of (schema.indexes || [])) {
+            Object.freeze(indexConfig);
+
             if (typeof indexConfig === 'string')
                 this._newIndex({ attrs: [indexConfig] });
             else
@@ -301,14 +252,6 @@ export class Table<ItemType = any> {
         }
 
         return index;
-    }
-
-    schema() {
-        return this._schema;
-    }
-
-    name() {
-        return this._name;
     }
 
     count() {
@@ -516,14 +459,13 @@ export class Table<ItemType = any> {
             const fieldValue = newItem[attr];
             if (fieldValue) {
 
-
                 let referencedObject;
 
                 if (reference.table) {
 
                     referencedObject = reference.table.getOneByAttrValue(reference.foreignAttr, fieldValue);
                     if (!referencedObject) {
-                        throw new Error(`Table${reference.table.name() ? (' ' + reference.table.name()) : ''}`
+                        throw new Error(`Table${reference.table.name ? (' ' + reference.table.name) : ''}`
                                         +` doesn't have a value for`
                                         +` ${reference.foreignAttr}=${fieldValue}`);
                     }
@@ -602,9 +544,9 @@ export class Table<ItemType = any> {
         if (MemoryTableExtraErrorMessages) {
 
             if (this.indexes.length === 0) {
-                message += `\n - Table ${this.name()} has no indexes`;
+                message += `\n - Table ${this.name} has no indexes`;
             } else {
-                message += `\n - Table ${this.name()} has indexes for:`;
+                message += `\n - Table ${this.name} has indexes for:`;
                 for (const index of this.indexes) {
                   message += `\n     [${index.attrs.toString()}]`;
                 }
@@ -698,7 +640,7 @@ export class Table<ItemType = any> {
 
         if (this.hasError()) {
             for (const error of this._errors.scan()) {
-                out.push(`#error ${error.errorType}${error.message ? (' ' + error.message) : ''}`);
+                out.push('# ' + errorItemToString(error));
             }
         }
 
@@ -764,7 +706,6 @@ export class Table<ItemType = any> {
             }
         }
 
-        // console.log('clearHeader', header(item));
         clearHeader(item);
     }
 
@@ -784,10 +725,6 @@ export class Table<ItemType = any> {
         this.delete(null);
     }
 
-    newRelatedTable(schema: TableSchema) {
-        return this.graph.newTable(schema);
-    }
-
     addChangeListener(listener: ItemChangeListener) {
         this.itemChangeListeners = this.itemChangeListeners || [];
         this.itemChangeListeners.push(listener);
@@ -803,8 +740,8 @@ export class Table<ItemType = any> {
     }
 
     usageError(message: string) {
-        if (this._name)
-            message = `[table ${this._name}] ${message}`;
+        if (this.name)
+            message = `[table ${this.name}] ${message}`;
         return new Error(message);
     }
     
@@ -817,17 +754,22 @@ export class Table<ItemType = any> {
     }
 
     errorsToException() {
-        return new Error("errors: " + this._errors.list());
+        return new Error(this._errors.list().map(errorItemToString).join('\n'));
+    }
+
+    throwErrors() {
+        if (this.hasError())
+            throw this.errorsToException();
+    }
+
+    query(queryLike: QueryLike, parameters: any = {}, context: QueryExecutionContext = {}): Stream {
+        // Create a throwaway Graph for this query.
+        const graph = new Graph();
+        graph.addTable(this, { readonly: context.readonly });
+        return graph.query(queryLike, parameters, context);
     }
 
     str() {
         return tableToString(this);
     }
 }
-
-platformExtendClass(Table);
-
-// next up for Table:
-//  - if we access for [a,b] and there's an index for [a] then use it.
-//  - finding an index is complicated: allow for separete steps: find the appropriate index, then use it.
-

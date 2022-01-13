@@ -1,2 +1,3 @@
 
-export { newGraph } from './arqe/Graph'
+export { Table } from './arqe/Table/index'
+export { newGraph, Graph } from './arqe'

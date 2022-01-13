@@ -13,7 +13,7 @@ function prepare(step: Step, later: Block) {
     let updatedStep = mainStep;
     updatedStep = later.step_with_verb(updatedStep, 'get');
 
-    prepareTableSearch(step, updatedStep, later);
+    prepareTableSearch(step.graph, step, updatedStep, later);
 }
 
 function mapStreamForEachItem(forEach: (item) => Stream) {

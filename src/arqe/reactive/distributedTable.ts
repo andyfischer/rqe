@@ -4,8 +4,10 @@ import { Table } from '../Table'
 import { randomHex } from '../utils/randomHex'
 import { TableSchemaIssue } from '../Errors'
 import { ItemChangeEvent } from './ItemChangeEvent'
+import { Graph } from '../Graph'
 
 interface Params {
+    graph: Graph
     source: Table
     delayToSyncMs: number
     onOutgoingData(changes: ItemChangeEvent[]): void
@@ -41,8 +43,9 @@ export function applyChange(table: Table, change: ItemChangeEvent) {
 
 export function connectDistributedTable(params: Params): DistributedTableConnection {
 
+    const graph = params.graph;
     const sourceTable = params.source;
-    const sourceSchema = sourceTable.schema();
+    const sourceSchema = sourceTable.schema;
     const myClientId = 'client-' + randomHex(8);
     let pendingSendTimer = null;
 
@@ -52,7 +55,7 @@ export function connectDistributedTable(params: Params): DistributedTableConnect
         throw new TableSchemaIssue(sourceTable, "couldn't find a unique attr");
     }
 
-    const syncStatus = sourceTable.newRelatedTable({
+    const syncStatus = graph.newTable({
         attrs: {
             [uniqueAttr]: {
                 unique: {
@@ -85,7 +88,7 @@ export function connectDistributedTable(params: Params): DistributedTableConnect
 
                 const sourceItem = sourceTable.one({ [uniqueAttr]: syncItem[uniqueAttr] });
                 if (!sourceItem)
-                    throw new Error(`sourceItem not found on ${sourceTable.name()} for ${uniqueAttr}=${syncItem[uniqueAttr]}`);
+                    throw new Error(`sourceItem not found on ${sourceTable.name} for ${uniqueAttr}=${syncItem[uniqueAttr]}`);
 
                 out.push({ verb: 'put', item: sourceItem, writer: myClientId });
             }

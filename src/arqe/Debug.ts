@@ -5,7 +5,7 @@ import { Table } from './Table'
 import { Block } from './Block'
 import { queryToString, queryTupleToString } from './Query'
 
-export function graphToString(graph: Graph, options: { reproducible?: boolean }) {
+export function graphToString(graph: Graph, options: { reproducible?: boolean } = {}) {
     const out: string[] = [];
 
     if (graph.graphId && !options.reproducible)
@@ -33,7 +33,7 @@ export function tableToString(table: Table) {
     let out: string[] = [];
 
     if (table.name)
-        out.push(`Table ${table._name}:`);
+        out.push(`Table ${table.name}:`);
     else
         out.push(`Table:`);
 

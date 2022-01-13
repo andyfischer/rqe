@@ -225,3 +225,11 @@ export function parseQueryTuple(str: string, ctx: Context = {}) {
     const it = lexStringToIterator(str);
     return parseQueryTupleFromTokens(it, ctx);
 }
+
+export function parseQueryTupleWithErrorCheck(str: string, ctx: Context = {}) {
+    const result = parseQueryTuple(str, ctx);
+    if (result.t === 'parseError')
+        throw new Error("Parse error: " + str);
+
+    return result as QueryTuple;
+}

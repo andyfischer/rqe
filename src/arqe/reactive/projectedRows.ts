@@ -2,11 +2,11 @@
 import { Table } from '../Table'
 import { QueryLike, toQuery } from '../Query'
 import { TransformQuery, LooseTransformQuery, toTransformQuery, applyTransform } from '../Transform'
+import { Graph } from '../Graph'
 import { c_item } from '../Enums'
 
-export function linkProjectedRows(fromTable: Table, queryLike: QueryLike, toTable: Table) {
+export function linkProjectedRows(graph: Graph, fromTable: Table, queryLike: QueryLike, toTable: Table) {
 
-    const graph = fromTable.graph;
     const query = toQuery(queryLike, { graph, expectTransform: true });
 
     applyTransform(graph, fromTable.list(), query)

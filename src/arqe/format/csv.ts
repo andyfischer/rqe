@@ -30,7 +30,7 @@ export function* formatAsCsv(table: Table, opts: Options = {}): IterableIterator
     const includeHeader = (opts.includeHeader !== undefined) ? opts.includeHeader : true;
 
     if (!attrs) {
-        attrs = Object.keys(table.schema().attrs);
+        attrs = Object.keys(table.schema.attrs);
     }
 
     if (includeHeader) {

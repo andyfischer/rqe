@@ -35,6 +35,8 @@ export class RunningQuery {
 
         if (this.graph && this.graph.logging.isEnabled()) {
             this.graph.logging.put('planning', `executing planned query:\n${this.planned.toLinkedBlock().str({ omitHeader: true })}`);
+
+            // console.log(this.planned.toLinkedBlock());
         }
 
         const input = this.input || Stream.newEmptyStream();
@@ -112,7 +114,7 @@ export function runQuery(graph: Graph, query: Query, input: Stream): Stream {
 
 export function runTableSearch(step: Step) {
     const block = new Block();
-    prepareTableSearch(step, block.namedInput('step'), block);
+    prepareTableSearch(step.graph, step, block.namedInput('step'), block);
     executeBlock(block, { step, graph: step.graph });
 }
 

@@ -3,6 +3,7 @@ import { Table } from './Table'
 import { Setup } from './Setup'
 import { Graph } from './Graph'
 import { Item } from './Item'
+import { parseQueryTupleWithErrorCheck } from './parser'
 
 export interface IndexConfiguration {
     attrs: string[]
@@ -86,7 +87,7 @@ export interface TableSchema {
 
 export interface LooseTableSchema {
     name?: string
-    attrs?: { [attr: string]: LooseAttrConfig }
+    attrs?: string | { [attr: string]: LooseAttrConfig }
     indexes?: IndexConfig[]
     references?: Reference[]
     foreignKeys?: Reference[]
@@ -126,26 +127,45 @@ export function findUniqueAttr(schema: TableSchema): [ string, AttrConfig ] | []
 
 export function fixLooseSchema(schema: LooseTableSchema): TableSchema {
 
-    schema.attrs = schema.attrs || {};
-    for (const attrConfig of Object.values(schema.attrs)) {
+    let attrs: { [key: string]: LooseAttrConfig };
 
-        if (attrConfig.unique === false)
-            delete attrConfig.unique;
-
-        if (attrConfig.unique === true)
-            attrConfig.unique = { onConflict: 'error' }
-
-        if (attrConfig.generate) {
-            if (!attrConfig.unique) 
-                attrConfig.unique = { onConflict: 'error' };
-
-            attrConfig.index = true;
+    if (typeof schema.attrs === 'string') {
+        attrs = {};
+        for (const tag of parseQueryTupleWithErrorCheck(schema.attrs, { expectVerb: false }).tags) {
+            attrs[tag.attr] = {};
         }
-        
-        if (attrConfig.unique) {
-            attrConfig.index = true;
-        }
+    } else {
+        attrs = schema.attrs || {};
     }
 
-    return schema as TableSchema;
+    for (const [attr, attrConfig] of Object.entries(attrs)) {
+
+        const fixedConfig = {
+            ...attrConfig
+        }
+
+        if (fixedConfig.unique === false)
+            delete fixedConfig.unique;
+
+        if (fixedConfig.unique === true)
+            fixedConfig.unique = { onConflict: 'error' }
+
+        if (fixedConfig.generate) {
+            if (!fixedConfig.unique) 
+                fixedConfig.unique = { onConflict: 'error' };
+
+            fixedConfig.index = true;
+        }
+        
+        if (fixedConfig.unique) {
+            fixedConfig.index = true;
+        }
+
+        attrs[attr] = fixedConfig;
+    }
+
+    return {
+        ...schema,
+        attrs,
+    } as TableSchema;
 }

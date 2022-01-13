@@ -113,7 +113,7 @@ export function createOnePlannedStep(plannedQuery: PlannedQuery, tuple: QueryTup
 
     verbDef.prepare(prepareStep, block);
     prepareStep.output.sendDoneIfNeeded();
-    const output = prepareStep.output.sync();
+    const output = prepareStep.output.sync({throwError:false});
 
     // Save results
     if (output.hasError()) {
@@ -138,7 +138,7 @@ export function createOnePlannedStep(plannedQuery: PlannedQuery, tuple: QueryTup
 }
 
 export function createInitialPlannedSteps(plannedQuery: PlannedQuery) {
-    const { graph, query } = plannedQuery;
+    const { query } = plannedQuery;
 
     const steps: PlannedStep[] = [];
 
@@ -269,33 +269,6 @@ function finalizeBlocks(plannedQuery: PlannedQuery) {
     }
 }
 
-/*
-function runStepInterceptors(plannedQuery: PlannedQuery) {
-    if (!plannedQuery.graph || !plannedQuery.graph.interceptors)
-        return;
-
-    const fixedSteps: PlannedStep[] = [];
-
-    for (const step of plannedQuery.steps) {
-        for (const interceptor of plannedQuery.graph.interceptors) {
-            const interceptorMatch = interceptor.match(step.tuple);
-
-            if (interceptorMatch && interceptorMatch.insertStepBefore) {
-                fixedSteps.push(createOnePlannedStep(plannedQuery, toQueryTuple(interceptorMatch.insertStepBefore), []));
-            }
-
-            fixedSteps.push(step);
-
-            if (interceptorMatch && interceptorMatch.insertStepAfter) {
-                fixedSteps.push(createOnePlannedStep(plannedQuery, toQueryTuple(interceptorMatch.insertStepAfter), []));
-            }
-        }
-    }
-
-    plannedQuery.steps = fixedSteps;
-}
-*/
-
 export function pickBestMatch(matches: {point: MountPoint, match: QueryMountMatch }[]) {
     // Maybe do something better here
     return matches[0];
@@ -320,12 +293,10 @@ export function findBestPointMatch(graph: Graph, tupleLike: QueryTupleLike): {po
     return match;
 }
 
-export function prepareTableSearch(step: Step, runtimeStep: Input, later: Block) {
-
-    const graph = step.graph;
+export function prepareTableSearch(graph: Graph, step: Step, runtimeStep: Input, later: Block) {
 
     if (step.has('from')) {
-        prepareTableSearchUsingFrom(step, runtimeStep, later);
+        prepareTableSearchUsingFrom(graph, step, runtimeStep, later);
         return;
     }
 
@@ -341,34 +312,11 @@ export function prepareTableSearch(step: Step, runtimeStep: Input, later: Block)
         return;
     }
 
-    /*
-    if (matches.length > 1) {
-
-        console.log('need to handle multiple points: ', matches.map(match => Array.from(match.match.attrs.entries() )));
-
-        const mainStep = later.namedInput('step');
-
-        // Join results from multiple mounts.
-        const output = later.step_output(mainStep);
-        const receivers = later.join_streams(later.value(matches.length), output);
-
-        for (let i = 0; i < matches.length; i++) {
-            const receiver = later.get_index(receivers, later.value(i));
-            const stream = later.new_stream();
-            later.send_to(stream, receiver);
-            const modifiedStep = later.step_with_output(later.namedInput('step'), stream);
-            later.call_mount_point(later.value(matches[i].point), modifiedStep);
-
-            // console.log(later.str());
-        }
-    } else {
-    */
-
     const point = match.point;
     later.call_mount_point(point.getRef(), later.namedInput('step'));
 }
 
-function prepareTableSearchUsingFrom(step: Step, runtimeStep: Input, later: Block) {
+function prepareTableSearchUsingFrom(graph: Graph, step: Step, runtimeStep: Input, later: Block) {
     const tableName = step.get("from");
     const point = step.graph.findTableByName(tableName);
 
@@ -425,6 +373,6 @@ function prepareTableSearchUsingFrom(step: Step, runtimeStep: Input, later: Bloc
 export function runTableSearch(step: Step) {
     const block = new Block();
 
-    prepareTableSearch(step, block.namedInput('step'), block);
+    prepareTableSearch(step.graph, step, block.namedInput('step'), block);
     executeBlock(block, { step, graph: step.graph, context: step.context });
 }

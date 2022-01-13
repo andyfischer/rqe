@@ -8,7 +8,7 @@ import { Module } from './Module'
 import { QueryTag, QueryLike, toQuery, Query, QueryTuple } from './Query'
 import { StoredQuery } from './StoredQuery'
 import { setupMap, MapMountConfig, setupObject, ObjectMountConfig, setupList, ListMountConfig } from './datastructures'
-import { mountTable as mountMemoryTable } from './Table/mountTable'
+import { mountTable as mountMemoryTable, TableMountConfig } from './Table/mountTable'
 import { TableSchema, LooseTableSchema, setupWithMountSpec, fixLooseSchema } from './Schema'
 import { ItemChangeListener } from './reactive/ItemChangeEvent'
 import { applyChangeToMountedTable } from './reactive/changePropogation'
@@ -37,6 +37,7 @@ export interface QueryExecutionContext {
     }
     mod?: AstModification
     input?: Stream
+    readonly?: boolean
 }
 
 export class Graph {
@@ -69,8 +70,27 @@ export class Graph {
         return this.tables.values();
     }
 
-    addTable(table: Table, name: string, id?: string) {
-        id = id || this.nextTableId.take();
+    addTable(table: Table, opts: TableMountConfig = {}) {
+        const schema = table.schema;
+
+        if (this.tablesByName.has(table.name)) {
+            if (this.tableRedefineOnExistingName) {
+                return this.tablesByName.get(table.name) as Table;
+            }
+
+            throw new Error("Already have a table with name: " + table.name);
+        }
+
+        const id = table.tableId || this.nextTableId.take();
+        
+        this.tables.set(id, table);
+        this.tablesByName.set(table.name, table);
+
+        let setup = new Setup();
+        setup = setupWithMountSpec(schema.mount, setup);
+
+        mountMemoryTable(setup, table, opts);
+        this.createModule(setup);
     }
 
     newTable<T = any>(schema?: LooseTableSchema): Table<T> {
@@ -79,24 +99,9 @@ export class Graph {
 
         schema = fixLooseSchema(schema);
         const tableId = this.nextTableId.take();
-        const table = new Table<T>(schema, { graph: this, tableId });
-        this.tables.set(table.tableId, table);
+        const table = new Table<T>(schema, { tableId });
 
-        if (this.tablesByName.has(schema.name)) {
-            if (this.tableRedefineOnExistingName) {
-                return this.tablesByName.get(schema.name) as Table<T>;
-            }
-
-            throw new Error("Already have a table with name: " + schema.name);
-        }
-
-        this.tablesByName.set(schema.name, table);
-
-        let setup = new Setup();
-        setup = setupWithMountSpec(schema.mount, setup);
-        mountMemoryTable(setup, table);
-
-        this.createModule(setup);
+        this.addTable(table);
 
         return table;
     }

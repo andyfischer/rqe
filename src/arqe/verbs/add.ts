@@ -25,7 +25,7 @@ function prepare(step: Step, later: Block) {
     updatedStep = later.step_with_input(updatedStep, later.new_stream());
     updatedStep = later.step_with_output(updatedStep, searchReceiver);
 
-    prepareTableSearch(step, updatedStep, later);
+    prepareTableSearch(step.graph, step, updatedStep, later);
 }
 
 export const add = {

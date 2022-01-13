@@ -201,7 +201,7 @@ function toList(s: string | string[]) {
     return [s];
 }
 
-export function toTableBind(decl: string, callback: HandlerCallback) {
+export function toTableBind(decl: string, callback: HandlerCallback): LooseBindParams {
     const params = parseTableDecl(decl);
     if (params.t === 'parseError')
         throw new Error("Failed to parse: " + decl + ' ' + params);

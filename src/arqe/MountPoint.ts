@@ -88,16 +88,15 @@ export class MountPoint {
                         step.output.sendDoneIfNeeded();
                     })
                     .catch(e => {
-
                         if ((e as BackpressureStop).backpressure_stop) {
                             // Function is deliberately being killed by a BackpressureStop exception. Not an error.
                             step.output.sendDoneIfNeeded();
                             return;
                         }
 
-                        console.error(e);
                         step.output.sendUnhandledError(e);
                         step.output.sendDoneIfNeeded();
+                        return;
                     });
                 }
             } catch (e) {
@@ -107,7 +106,6 @@ export class MountPoint {
                     return;
                 }
 
-                console.error(e);
                 step.output.sendUnhandledError(e);
                 step.output.sendDoneIfNeeded();
                 return;

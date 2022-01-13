@@ -1,5 +1,6 @@
 
-import { AttrSet, AttrMap, LooseAttrList, header, itemGlobalId } from '.'
+import { AttrSet, AttrMap, LooseAttrList } from '.'
+import { header, itemGlobalId } from './ObjectHeader'
 import { Table } from '.'
 
 function valueToKeyString(value: any) {

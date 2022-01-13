@@ -1,9 +1,10 @@
 
-import { Table } from './Table'
+import { Table } from './Table/index'
 import { TableSchema } from './Schema'
-import { QueryTuple } from './Query'
+import { QueryTuple, queryTupleToString } from './Query'
 
-export type ErrorType = 'verb_not_found' | 'unhandled_error' | 'provider_not_found' | 'missing_parameter' | 'no_table_found' | 'Unimplemented' | 'TableNotFound'
+export type ErrorType = 'verb_not_found' | 'unhandled_error' | 'provider_not_found' | 'missing_parameter'
+    | 'no_table_found' | 'Unimplemented' | 'TableNotFound'
     | 'MissingAttrs' | 'MissingValue' | 'NotSupported' | 'ExtraAttrs'
 
 export interface ErrorItem {
@@ -18,7 +19,7 @@ export interface ErrorItem {
 
 export class TableSchemaIssue extends Error {
     constructor(table: Table, message: string) {
-        super(`Table [${table.name()}] schema issue: ${message}`);
+        super(`Table [${table.name}] schema issue: ${message}`);
     }
 }
 
@@ -40,6 +41,35 @@ export const ErrorTableSchema: TableSchema  = {
         step: {},
         phase: {},
     }
+}
+
+export function errorItemToString(item: ErrorItem) {
+    let out = `${item.errorType} error`;
+
+    const otherDetails = { ...item };
+
+    delete otherDetails.errorType;
+    delete otherDetails.stack;
+    delete otherDetails.message;
+    delete otherDetails.query;
+    delete otherDetails.step;
+    delete otherDetails.phase;
+
+    const otherDetailsString = JSON.stringify(otherDetails);
+
+    if (item.message)
+        out += `: ${item.message}`;
+
+    if (item.query)
+        out += ` (${queryTupleToString(item.query)})`;
+
+    if (otherDetailsString !== '{}')
+        out += ` ${otherDetailsString}`
+
+    if (item.stack)
+        out += `\nStack trace: ${item.stack}`
+
+    return out;
 }
 
 export function newErrorTable() {

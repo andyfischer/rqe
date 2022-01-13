@@ -230,7 +230,7 @@ export function* rewriteQueryTags(ref: { query: Query }): IterableIterator<[ Que
         for (let tagIndex=0; tagIndex < step.tags.length; tagIndex++) {
             let tag = step.tags[tagIndex];
 
-            function getWritableTag(): QueryTag {
+            const getWritableTag = (): QueryTag => {
                 if (!copiedQuery) {
                     ref.query = shallowCopyQuery(ref.query);
                     copiedQuery = true;
