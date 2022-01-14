@@ -186,6 +186,10 @@ export class Step {
         return tagsToItem(this.tags);
     }
 
+    queryAsValue() {
+        return tagsToItem(this.tags);
+    }
+
     queryValuesToItem() {
         const item: Item = {};
         for (const tag of this.tuple.tags) {

@@ -3,12 +3,12 @@ import { PlannedQuery } from './PlannedQuery'
 import { Stream } from './Stream'
 import { Step } from './Step'
 import { Graph } from './Graph'
-import { getVerb } from './verbs/_list'
 import { Query, QueryTuple } from './Query'
 import { Block, executeBlock, Input } from './Block'
 import { prepareTableSearch, MountPointRef } from './PlannedQuery'
 import { MountPoint } from './MountPoint'
 import { QueryExecutionContext } from './Graph'
+import { getVerb } from './verbs/_list'
 
 export class RunningQuery {
     graph: Graph
@@ -35,8 +35,6 @@ export class RunningQuery {
 
         if (this.graph && this.graph.logging.isEnabled()) {
             this.graph.logging.put('planning', `executing planned query:\n${this.planned.toLinkedBlock().str({ omitHeader: true })}`);
-
-            // console.log(this.planned.toLinkedBlock());
         }
 
         const input = this.input || Stream.newEmptyStream();
@@ -85,7 +83,7 @@ export class RunningQuery {
     }
 
     private runOneStep(step: Step) {
-        const verbDef = getVerb(step.verb);
+        let verbDef = step.graph ? step.graph.getVerb(step.tuple.verb) : getVerb(step.tuple.verb);
         if (!verbDef)
             throw new Error("verb not found: " + step.verb);
 

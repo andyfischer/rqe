@@ -10,7 +10,7 @@ export type GetArgsFunc<Args> = (step: Step) => Args
 export type AggregationFunc = (items: Item[]) => Item[]
 
 export interface Verb {
-    prepare: (step: Step, block: Block) => void
+    prepare?: (step: Step, block: Block) => void
     run?: (step: Step) => void
     runUsingBlock?: boolean
 }

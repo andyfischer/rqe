@@ -4,7 +4,6 @@ import { Table } from './Table'
 import { Graph } from './Graph'
 import { Query, QueryTuple, queryTupleToString, toQueryTuple, QueryTupleLike } from './Query'
 import { Stream } from './Stream'
-import { getVerb } from './verbs/_list'
 import { ErrorItem, newErrorTable } from './Errors'
 import { IDSourceNumber as IDSource } from './utils/IDSource'
 import { Item } from './Item'
@@ -13,6 +12,8 @@ import { Block, executeBlock, Input, runAstModification } from './Block'
 import { getQueryMountMatch, QueryMountMatch } from './Matching'
 import { explainWhyQueryFails } from './Explain'
 import { QueryExecutionContext } from './Graph'
+import { getVerb } from './verbs/_list'
+import { has } from './Item'
 
 export interface MountPointRef {
     moduleId: string
@@ -45,6 +46,7 @@ export class PlannedQuery {
 
     private prepare() {
         createInitialPlannedSteps(this);
+        handlePlanTimeVerbs(this);
         optimizeForProviders(this);
         finalizeBlocks(this);
     }
@@ -77,6 +79,7 @@ export function createOnePlannedStep(plannedQuery: PlannedQuery, tuple: QueryTup
     const { graph } = plannedQuery;
 
     const id = plannedQuery.stepIds.take();
+
     // Create a temporary Step object to run .prepare.
     const prepareStep = new Step({
         id,
@@ -91,7 +94,7 @@ export function createOnePlannedStep(plannedQuery: PlannedQuery, tuple: QueryTup
     });
 
     // Call .prepare
-    const verbDef = getVerb(tuple.verb);
+    let verbDef = plannedQuery.graph ? plannedQuery.graph.getVerb(tuple.verb) : getVerb(tuple.verb);
     const block = new Block();
 
     if (!verbDef) {
@@ -111,7 +114,9 @@ export function createOnePlannedStep(plannedQuery: PlannedQuery, tuple: QueryTup
         }
     }
 
-    verbDef.prepare(prepareStep, block);
+    if (verbDef.prepare)
+        verbDef.prepare(prepareStep, block);
+
     prepareStep.output.sendDoneIfNeeded();
     const output = prepareStep.output.sync({throwError:false});
 
@@ -137,6 +142,12 @@ export function createOnePlannedStep(plannedQuery: PlannedQuery, tuple: QueryTup
     }
 }
 
+function replaceOnePlannedStep(plannedQuery: PlannedQuery, steps: PlannedStep[], stepIndex: number, newTuple: QueryTuple) {
+    const previousStep = steps[stepIndex - 1];
+    const previousOutput = (previousStep && previousStep.outputSchema) || [];
+    steps[stepIndex] = createOnePlannedStep(plannedQuery, newTuple, previousOutput);
+}
+
 export function createInitialPlannedSteps(plannedQuery: PlannedQuery) {
     const { query } = plannedQuery;
 
@@ -157,6 +168,60 @@ export function createInitialPlannedSteps(plannedQuery: PlannedQuery) {
     }
 
     plannedQuery.steps = steps;
+}
+
+function handlePlanTimeVerbs(plannedQuery: PlannedQuery) {
+    const graph = plannedQuery.graph;
+    const steps = plannedQuery.steps;
+    const fixedSteps: PlannedStep[] = [];
+
+    function bringInAttr(stepIndex: number, attr: string) {
+        for (; stepIndex >= 0; stepIndex--) {
+            const step = steps[stepIndex];
+
+            // Check if the step's output already has this attr.
+            for (const output of step.outputSchema) {
+                if (has(output, attr)) {
+                    // The attr is already here, we're good.
+                    return;
+                }
+            }
+
+            // Try to pull the attr from this table.
+            if (step.tuple.verb === 'get') {
+                const enhancedTuple: QueryTuple = {
+                    t: 'queryStep',
+                    verb: step.tuple.verb,
+                    tags: step.tuple.tags.concat([{ t: 'tag', attr, value: { t: 'no_value' }}]),
+                }
+
+                const existingMatch = findBestPointMatch(graph, step.tuple);
+                const enhancedMatch = findBestPointMatch(graph, enhancedTuple);
+
+                // If we matched to the same table then we're good to enhance this step.
+                if (existingMatch && enhancedMatch && existingMatch.point === enhancedMatch.point) {
+                    replaceOnePlannedStep(plannedQuery, fixedSteps, stepIndex, enhancedTuple);
+                    return;
+                }
+            }
+        }
+
+        // Failed to bring in the attr - TODO is record an error.
+    }
+
+    for (let stepIndex=0; stepIndex < steps.length; stepIndex++) {
+        const step = steps[stepIndex];
+
+        if (step.tuple.verb === 'need') {
+            for (const tag of step.tuple.tags)
+                bringInAttr(stepIndex - 1, tag.attr);
+            continue;
+        }
+
+        fixedSteps.push(step);
+    }
+
+    plannedQuery.steps = fixedSteps;
 }
 
 function findProviderUsedByStep(plannedQuery: PlannedQuery, step: PlannedStep) {

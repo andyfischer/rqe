@@ -23,6 +23,8 @@ export interface PipeHeader {
     item: Item
 }
 
+export type TransformFunc = (item: Item) => Item | Item[]
+
 export type PipedData = PipeHeader | PipeItem | PipeDone | PipeError 
 
 export interface PipeReceiver {
@@ -114,6 +116,27 @@ export class Stream {
             for (const data of backlog)
                 this.downstream.receive(data);
         }
+    }
+
+    transform(receiver: PipeReceiver, callback: TransformFunc) {
+        this.sendTo({
+            receive: (msg) => {
+                switch (msg.t) {
+                    case c_item:
+
+                        let result = callback(msg.item) || [];
+                        if (!Array.isArray(result))
+                            result = [result];
+
+                        for (const newItem of (result as Item[]))
+                            receiver.receive({t: c_item, item: newItem });
+
+                        break;
+                    default:
+                        receiver.receive(msg);
+                }
+            }
+        });
     }
 
     // Use as a Promise

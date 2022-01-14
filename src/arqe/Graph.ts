@@ -1,6 +1,6 @@
 
 import { IDSource } from './utils/IDSource'
-import { Table } from './Table'
+import { Table } from './Table/index'
 import { Scope } from './Scope'
 import { Stream } from './Stream'
 import { Setup, SetupCallback } from './Setup'
@@ -25,6 +25,8 @@ import { MountPoint } from './MountPoint'
 import { setupLoggingSubsystem, EmptyLoggingSubsystem } from './LoggingSubsystem'
 import { getQueryMountMatch, QueryMountMatch } from './Matching'
 import { AstModification } from './Block'
+import { Verb } from './verbs/_shared'
+import { getVerb } from './verbs/_list'
 
 let _nextGraphID = new IDSource('graph-');
 
@@ -53,6 +55,7 @@ export class Graph {
     providerTable: Table<Provider>
     tableRedefineOnExistingName = false
     logging = new EmptyLoggingSubsystem()
+    customVerbs: Table<{ name: string, def: Verb}>
 
     constructor() {
         this.graphId = _nextGraphID.take() + randomHex(6);
@@ -124,7 +127,7 @@ export class Graph {
         });
     }
 
-    mountFunc(decl: string, callback: ItemCallback) {
+    func(decl: string, callback: ItemCallback) {
         return this.createModule(setup => {
             setup.table(toTableBind(decl, itemCallbackToHandler(callback)));
         });
@@ -241,6 +244,32 @@ export class Graph {
         }
 
         this.schemaListeners.push(listener);
+    }
+
+    addCustomVerb(name: string, def: Verb) {
+        if (!this.customVerbs) {
+            this.customVerbs = this.newTable({
+                attrs: {
+                    name: {},
+                    def: {},
+                },
+                funcs: [
+                    'name ->'
+                ]
+            });
+        }
+    
+        this.customVerbs.put({name, def});
+    }
+
+    getVerb(name: string) {
+        if (this.customVerbs) {
+            const foundCustom = this.customVerbs.one({name});
+            if (foundCustom)
+                return foundCustom.def;
+        }
+
+        return getVerb(name);
     }
 
     str(options: { reproducible?: boolean } = {}) {

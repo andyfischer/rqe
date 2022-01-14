@@ -9,6 +9,7 @@ import { join } from './join'
 import { just } from './just'
 import { limit } from './limit'
 import { last } from './last'
+import { need } from './need'
 import { one } from './one'
 import { rate } from './rate'
 import { rename } from './rename'
@@ -33,6 +34,7 @@ function init() {
         just,
         limit,
         last,
+        need,
         one,
         save_to_csv,
         then,
