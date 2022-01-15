@@ -4,5 +4,5 @@
 
 # API
 
-* [API index](./api/index.md)
-* [Graph](./api/tiny-memory-db.graph.md)
+* [Graph](./tiny-memory-db.graph.md)
+* [Stream](./tiny-memory-db.stream.md)
