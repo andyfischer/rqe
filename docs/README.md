@@ -3,6 +3,8 @@
 
 Zero-dependency library for doing database-like operations on in-memory data.
 
+[Query Syntax](./query_syntax.md)
+
 # Quick Example #
 
 Create a table:

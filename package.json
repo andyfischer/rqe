@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "types":"dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p ."
+    "build": "tsc -p .",
+    "generate-docs": "mkdir -p dist/api-extractor && api-extractor run --local && api-documenter markdown -i temp -o docs/api"
   },
   "author": "andyfischer",
   "license": "Unlicense",
