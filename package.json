@@ -6,7 +6,7 @@
   "types":"dist/index.d.ts",
   "scripts": {
     "build": "tsc -p .",
-    "generate-docs": "mkdir -p dist/api-extractor && api-extractor run --local && api-documenter markdown -i temp -o docs/api"
+    "generate-docs": "mkdir -p dist/api-extractor && api-extractor run --local && api-documenter markdown -i temp -o docs/api && mv docs/api/* docs"
   },
   "author": "andyfischer",
   "license": "Unlicense",

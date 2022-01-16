@@ -1,7 +1,7 @@
 
 # tiny-memory-db #
 
-Zero-dependency library for doing database-like operations on in-memory data.
+Zero-dependency library for doing database operations on in-memory data.
 
 # Quick Example #
 

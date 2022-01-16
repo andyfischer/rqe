@@ -3,8 +3,6 @@
 
 This library has its own query syntax for fetching and transforming data.
 
-Note that we're planning to also support SQL sometime in the future.
-
 The syntax was inspired by various data transformation syntaxes out there,
 including the one used by [Sumo Logic](https://help.sumologic.com/01Start-Here/Quick-Start-Tutorials).
 
@@ -18,40 +16,40 @@ Compared to SQL, the builtin syntax:
  - Chains together steps with the pipe operator `|` for operations like sorting, limiting, 
    additional filtering, etc.
 
+Note that we ARE planning to also support for SQL syntax at some point.
+
 ### Example queries ###
 
-Fetch all the items from the table with attributes `user` and `name`:
+Fetch all the items from the table with attributes `user_id` and `name`:
 
-    `user name`
+    user_id name
 
-Fetch the name associated with a certain user:
+Fetch the name associated with a certain user_id:
 
-    `user=xyz name`
+    user_id=xyz name
 
 Fetch up to 10 users:
 
-    `user name | limit 10`
+    user_id name | limit 10
+
+### Compared with SQL ###
+
+Fetch items from a table.
+
+| description | tiny-memory-db | SQL |
+| ----------- | -------------- | --- | 
+| Fetch items from a table | `user_id name` | `SELECT user_id, name from user` |
+| Limit results | `user_id name \| limit 10` | `SELECT user_id, name from user LIMIT 10` |
+| Filter by a column value | `user_id=xyz name` | `SELECT user_id, name from user WHERE user_id="xyz"` |
+| Join | `user_id name \| join user_id is_subscribed` | `SELECT user.user_id, user.name, subscription_status.is_subscribed FROM user INNER JOIN subscription_status ON subscription_status.user_id = user.user_id` |
 
 ### Syntax ###
 
-    <get parameters> (| <verb> <parameters>)
+    <get parameters> (| <verb> <parameters>)*
 
-Each query starts with a list of parameters (the "get" operation).
+Each query starts with a list of parameters (the "get" operation), followed optionally by a list of piped transformation steps.
 
-The parameters contains either empty attributes (like `user`), or attribute-value tags (like `user=xyz`).
+In the "get", the parameters can either be empty attributes (like `user`), or attribute-value tags (like `user=xyz`). The
+table is found implicitly based on which attributes are used.
 
-After the first operation you can optionally add transform steps, each one with a verb and its own parameters.
-
-| Verb | Description |
-| ----  | ----------- |
-| count | Outputs a single count=`x` item with the count of incoming items. |
-| join <query> | Interprets the parameters as another table fetch, and joins the results with the incoming items. |
-| just <attributes> | Transforms values to only include the given <attributes> |
-| last <n>          | Outputs the final N items. |
-| limit <n>         | Outputs the first N items. |
-| one               | Outputs a single item.     |
-| rename <x> -> <y>     | Transforms incoming values so that attribute <y>x is renamed to <y> |
-| reverse           | Collects all the incoming items and then outputs them in reverse order |
-| value <item>      | Sends the <item> parameter as an output value |
-| where <condition> | Filters the outputs to only include items matching the condition |
-| without <attributes> | Transforms values to not include the given <attributes> |
+See: [Verbs](./verbs.md)
