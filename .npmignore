@@ -1,2 +1,5 @@
-
+docs
 src
+dist/api-extractor
+docsify-tools
+temp
