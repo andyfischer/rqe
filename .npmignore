@@ -3,3 +3,4 @@ src
 dist/api-extractor
 docsify-tools
 temp
+api-extractor.json
