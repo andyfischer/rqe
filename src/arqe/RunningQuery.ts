@@ -6,7 +6,7 @@ import { Graph } from './Graph'
 import { Query, QueryTuple } from './Query'
 import { Block, executeBlock, Input } from './Block'
 import { prepareTableSearch, MountPointRef } from './PlannedQuery'
-import { MountPoint } from './MountPoint'
+import { MountPoint, callMountPointWithStep } from './MountPoint'
 import { QueryExecutionContext } from './Graph'
 import { getVerb } from './verbs/_list'
 
@@ -63,11 +63,13 @@ export class RunningQuery {
             previousOutput = output;
         }
 
-        // Connect last output to RunningQuery.output.
-        if (steps.length > 0)
+        if (steps.length > 0) {
+            // Connect last output to RunningQuery.output.
             steps[steps.length - 1].output.sendTo(this.output);
-        else
+        } else {
+            // No steps - just pass through input -> output.
             input.sendTo(this.output);
+        }
 
         this.steps = steps;
 
@@ -90,7 +92,6 @@ export class RunningQuery {
         let handler = verbDef.run;
 
         if (!handler && verbDef.runUsingBlock) {
-            // console.log(step.plannedStep.block.str())
             handler = (step: Step) => executeBlock(step.plannedStep.block, { step, graph: this.graph });
         }
 
@@ -145,16 +146,17 @@ export function callMountPoint(graph: Graph, context: QueryExecutionContext, poi
     if (assumeIncludeTags.length > 0) {
         step = step.withTags(
             step.tags.concat(
-                assumeIncludeTags.map(attr => ({ t: 'tag', attr, value: { t: 'no_value'} }))
+                assumeIncludeTags.map(attr => ({ t: 'tag', attr, value: { t: 'no_value' } }))
             )
         )
     }
 
     // Filter the output to only include mentioned tags.
     if (!step.hasStar()) {
-        let downstream = step.output;
+        let downstream = output;
 
         let filtering = new Stream();
+
         filtering.sendTo({
             receive(data) {
                 if (data.t === 'item') {
@@ -180,7 +182,7 @@ export function callMountPoint(graph: Graph, context: QueryExecutionContext, poi
         step = step.withOutput(filtering);
     }
 
-    point.callWithParams(step);
+    callMountPointWithStep(point, step);
 }
 
 export function runQueryWithProvider(graph: Graph, providerId: string, query: Query, input: Stream): Stream {

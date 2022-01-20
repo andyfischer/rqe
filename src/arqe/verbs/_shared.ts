@@ -7,7 +7,7 @@ import { Block } from '../Block'
 
 export type TransformFunc<Args> = (item: Item, args: Args) => Item[]
 export type GetArgsFunc<Args> = (step: Step) => Args
-export type AggregationFunc = (items: Item[]) => Item[]
+export type AggregationFunc = (items: Item[], step: Step) => Item[]
 
 export interface Verb {
     prepare?: (step: Step, block: Block) => void
@@ -56,7 +56,7 @@ export function aggregationVerb(func: AggregationFunc): Verb {
                 switch (data.t) {
 
                 case 'done':
-                    const result = func(items);
+                    const result = func(items, step);
                     items = [];
                     for (const item of result) {
                         step.output.put(item);

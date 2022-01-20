@@ -71,55 +71,6 @@ export class MountPoint {
         return this.attrs.has(attr);
     }
 
-    callWithParams(step: Step) {
-
-        step.graph.logging.put('execution', `call_mount_point: mount=${this.name} tuple=${valueToString(step.tuple)}`);
-
-        if (this.callback) {
-            try {
-                let result: any = this.callback(step);
-
-                if (result && result.then) {
-                    // Implicit async
-                    step.async();
-
-                    result
-                    .then(() => {
-                        step.output.sendDoneIfNeeded();
-                    })
-                    .catch(e => {
-                        if ((e as BackpressureStop).backpressure_stop) {
-                            // Function is deliberately being killed by a BackpressureStop exception. Not an error.
-                            step.output.sendDoneIfNeeded();
-                            return;
-                        }
-
-                        step.output.sendUnhandledError(e);
-                        step.output.sendDoneIfNeeded();
-                        return;
-                    });
-                }
-            } catch (e) {
-                if ((e as BackpressureStop).backpressure_stop) {
-                    // Function is deliberately being killed by a BackpressureStop exception. Not an error.
-                    step.output.sendDoneIfNeeded();
-                    return;
-                }
-
-                step.output.sendUnhandledError(e);
-                step.output.sendDoneIfNeeded();
-                return;
-            }
-
-            // Automatically call 'done' if the call is not async.
-            if (!step.enabledAsync) {
-                step.output.sendDoneIfNeeded();
-            }
-
-            return;
-        }
-    }
-
     getAddedAttribute(attr: string) {
         return this.addedAttributeTables.get(attr);
     }
@@ -130,5 +81,57 @@ export class MountPoint {
 
     delete() {
         return this.getAddedAttribute('delete');
+    }
+}
+
+export function callMountPointWithStep(point: MountPoint, step: Step) {
+    step.graph.logging.put('execution', `call_mount_point: mount=${point.name} tuple=${valueToString(step.tuple)}`);
+
+    if (!point.callback)
+        throw new Error("MountPoint has no .callback");
+
+    try {
+        let result: any = point.callback(step);
+
+        if (result && result.then) {
+            if (!step.declaredStreaming) {
+                // Implicit async
+                step.async();
+
+                result = result.then(() => {
+                    step.output.sendDoneIfNeeded();
+                })
+            }
+            
+            // Catch exceptions (even if declaredStreaming is true)
+
+            result
+            .catch(e => {
+                if ((e as BackpressureStop).backpressure_stop) {
+                    // Function is deliberately being killed by a BackpressureStop exception. Not an error.
+                    step.output.sendDoneIfNeeded();
+                    return;
+                }
+
+                step.output.sendUnhandledError(e);
+                step.output.sendDoneIfNeeded();
+                return;
+            });
+        }
+    } catch (e) {
+        if ((e as BackpressureStop).backpressure_stop) {
+            // Function is deliberately being killed by a BackpressureStop exception. Not an error.
+            step.output.sendDoneIfNeeded();
+            return;
+        }
+
+        step.output.sendUnhandledError(e);
+        step.output.sendDoneIfNeeded();
+        return;
+    }
+
+    // Automatically call 'done' if the call is not async.
+    if (!step.declaredAsync && !step.declaredStreaming) {
+        step.output.sendDoneIfNeeded();
     }
 }

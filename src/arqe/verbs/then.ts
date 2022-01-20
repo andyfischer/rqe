@@ -18,8 +18,7 @@ function prepare(step: Step, block: Block) {
 }
 
 function run(step: Step) {
-    const { receivers, stream } = joinStreams(2);
-    stream.sendTo(step.output);
+    const receivers = joinStreams(2, step.output);
 
     let hasLaunchedSearch = false;
 

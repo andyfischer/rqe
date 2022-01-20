@@ -3,6 +3,7 @@ import { Item } from './Item'
 import { Table } from './Table/index'
 import { c_done, c_item } from './Enums'
 import { ErrorItem, ErrorType } from './Errors'
+import { IDSourceNumber as IDSource } from './utils/IDSource'
 
 interface PipeItem {
     t: 'item',
@@ -31,17 +32,16 @@ export interface PipeReceiver {
     receive(data: PipedData): void
 }
 
-export function joinStreams(count: number) {
+export function joinStreams(count: number, output: Stream) {
 
-    const stream = new Stream();
     const receivers: PipeReceiver[] = [];
     let unfinishedCount = count;
 
     for (let i=0; i < count; i++) {
         receivers.push({
             receive(data: PipedData) {
-                if (data.t === 'done') {
 
+                if (data.t === 'done') {
                     if (unfinishedCount === 0)
                         throw new Error("joinStreams got too many 'done' messages");
 
@@ -51,12 +51,12 @@ export function joinStreams(count: number) {
                         return;
                 }
 
-                stream.receive(data);
+                output.receive(data);
             }
         })
     }
 
-    return { receivers, stream };
+    return receivers;
 }
 
 export class BackpressureStop extends Error {
@@ -67,8 +67,12 @@ export class BackpressureStop extends Error {
     }
 }
 
+const nextStreamId = new IDSource();
+
 export class Stream {
 
+    id: number
+    label?: string
     downstream: PipeReceiver
     receivedDone = false;
 
@@ -76,6 +80,11 @@ export class Stream {
     _backlog: PipedData[]
 
     _backpressureStop: boolean
+
+    constructor(label?: string) {
+        this.label = label;
+        this.id = nextStreamId.take();
+    }
 
     isDone() {
         return this.receivedDone;
@@ -88,7 +97,7 @@ export class Stream {
         }
 
         if (this.receivedDone) {
-            throw new Error("Stream received more data after 'done'")
+            throw new Error(`Stream #${this.id} received more data after 'done': ` + JSON.stringify(data))
         }
 
         if (data.t === 'done')

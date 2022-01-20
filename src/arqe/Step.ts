@@ -40,7 +40,8 @@ export class Step {
     plannedStep: PlannedStep
     running: RunningQuery
 
-    enabledAsync: boolean
+    declaredAsync: boolean
+    declaredStreaming: boolean
 
     constructor(args: ConstructorArgs) {
         if (!args.context)
@@ -82,7 +83,7 @@ export class Step {
 
     withVerb(verb: string) {
         const tuple: QueryTuple = {
-            t: 'queryStep',
+            t: 'tuple',
             verb,
             tags: this.tuple.tags
         };
@@ -94,7 +95,7 @@ export class Step {
 
     withTags(tags: QueryTag[]) {
         const tuple: QueryTuple = {
-            t: 'queryStep',
+            t: 'tuple',
             verb: this.tuple.verb,
             tags,
         };
@@ -118,7 +119,7 @@ export class Step {
 
     dropAttr(attr: string): Step {
         const tuple: QueryTuple = {
-            t: 'queryStep',
+            t: 'tuple',
             verb: this.tuple.verb,
             tags: this.tuple.tags.filter(tag => tag.attr !== attr)
         };
@@ -137,7 +138,7 @@ export class Step {
 
     dropStar(): Step {
         const tuple: QueryTuple = {
-            t: 'queryStep',
+            t: 'tuple',
             verb: this.tuple.verb,
             tags: this.tuple.tags.filter(tag => !(tag.specialAttr && tag.specialAttr.t === 'star')),
         };
@@ -161,7 +162,7 @@ export class Step {
             tags.push({ t: 'tag', attr, value: { t: 'no_value' }});
 
         const tuple: QueryTuple = {
-            t: 'queryStep',
+            t: 'tuple',
             verb: this.tuple.verb,
             tags,
         };
@@ -306,6 +307,10 @@ export class Step {
     }
 
     async() {
-        this.enabledAsync = true;
+        this.declaredAsync = true;
+    }
+
+    streaming() {
+        this.declaredStreaming = true;
     }
 }

@@ -6,6 +6,7 @@ import { StringValue } from '../TaggedValue'
 import { prepareTableSearch } from '../PlannedQuery'
 import { Block } from '../Block'
 import { c_done, c_item } from '../Enums'
+import { Item } from '../Item'
 
 function prepare(step: Step, later: Block) {
     const mainStep = later.namedInput('step');
@@ -16,12 +17,47 @@ function prepare(step: Step, later: Block) {
     prepareTableSearch(step.graph, step, updatedStep, later);
 }
 
+const maxConcurrent = 300;
+
 function mapStreamForEachItem(forEach: (item) => Stream) {
 
     let incomingHasFinished = false;
-    let unfinishedMappedStreams = 0;
+    let unfinishedStreams = 0;
 
     const output = new Stream();
+    const incomingQueue = [];
+
+    function startRunning(item: Item) {
+        const streamForInput = forEach(item);
+        unfinishedStreams++;
+
+        streamForInput.sendTo({
+            receive(data) {
+                switch (data.t) {
+                case 'done':
+                    // console.log('mapStreamForEachItem saw stream end');
+                    unfinishedStreams--;
+                    maybePopFromQueue();
+                    if (incomingHasFinished && unfinishedStreams === 0) {
+                        // console.log('mapStreamForEachItem done (2)');
+                        output.done();
+                    }
+                    break;
+                case 'item':
+                    // console.log('mapStreamForEachItem sending', data.item);
+                    output.put(data.item);
+                    break;
+                }
+            }
+        });
+    }
+
+    function maybePopFromQueue() {
+        while (unfinishedStreams < maxConcurrent && incomingQueue.length > 0) {
+            const next = incomingQueue.shift();
+            startRunning(next);
+        }
+    }
 
     return {
         input: {
@@ -30,7 +66,7 @@ function mapStreamForEachItem(forEach: (item) => Stream) {
                 case c_done:
                     incomingHasFinished = true;
 
-                    if (incomingHasFinished && unfinishedMappedStreams === 0) {
+                    if (incomingHasFinished && unfinishedStreams === 0) {
                         // console.log('mapStreamForEachItem done (1)');
                         output.done();
                     }
@@ -38,28 +74,14 @@ function mapStreamForEachItem(forEach: (item) => Stream) {
                     break;
                 case c_item: {
                     const item = data.item;
-                    // console.log('mapStreamForEachItem opening stream for', item);
-                    const streamForInput = forEach(item);
-                    unfinishedMappedStreams++;
 
-                    streamForInput.sendTo({
-                        receive(data) {
-                        switch (data.t) {
-                            case 'done':
-                                // console.log('mapStreamForEachItem saw stream end');
-                                unfinishedMappedStreams--;
-                                if (incomingHasFinished && unfinishedMappedStreams === 0) {
-                                    // console.log('mapStreamForEachItem done (2)');
-                                    output.done();
-                                }
-                                break;
-                            case 'item':
-                                // console.log('mapStreamForEachItem sending', data.item);
-                                output.put(data.item);
-                                break;
-                            }
-                        }
-                    });
+                    if (unfinishedStreams >= maxConcurrent) {
+                        // we're at the limit, stick it on the queue.
+                        incomingQueue.push(item);
+                        return;
+                    }
+
+                    startRunning(item);
                     break;
                 }
                 }

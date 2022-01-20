@@ -225,7 +225,7 @@ export function itemCallbackToHandler(callback: ItemCallback): HandlerCallback {
                 if (Array.isArray(data)) {
                     for (const el of data)
                         ctx.put(el);
-                    return
+                    return;
                 }
 
                 ctx.put(data);
@@ -237,7 +237,7 @@ export function itemCallbackToHandler(callback: ItemCallback): HandlerCallback {
             if (Array.isArray(data)) {
                 for (const el of data)
                     ctx.put(el);
-                return
+                return;
             }
 
             ctx.put(data);

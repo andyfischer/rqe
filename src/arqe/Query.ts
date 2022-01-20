@@ -20,7 +20,7 @@ export interface QueryTag {
 }
 
 export interface QueryTuple {
-    t: 'queryStep'
+    t: 'tuple'
     verb: string
     tags: QueryTag[]
 }
@@ -62,7 +62,7 @@ export function toQueryTuple(step: QueryTupleLike, ctx: QueryPrepareContext = {}
         }
 
         return {
-            t: 'queryStep',
+            t: 'tuple',
             verb: 'join',
             tags,
         }
@@ -77,7 +77,7 @@ export function toQueryTuple(step: QueryTupleLike, ctx: QueryPrepareContext = {}
         return parsed as QueryTuple;
     }
 
-    if ((step as QueryTuple).t === 'queryStep')
+    if ((step as QueryTuple).t === 'tuple')
         return step as QueryTuple;
 
     const looseStep = step as LooseQueryVerbStep;
@@ -95,7 +95,7 @@ export function toQueryTuple(step: QueryTupleLike, ctx: QueryPrepareContext = {}
     }
 
     return {
-        t: 'queryStep',
+        t: 'tuple',
         verb: looseStep.verb || 'get',
         tags
     };

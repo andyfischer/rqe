@@ -3,7 +3,7 @@ import { callMountPoint, runQueryWithProvider } from './RunningQuery'
 import { MountPoint } from './MountPoint'
 import { MountPointRef } from './PlannedQuery'
 import { Step } from './Step'
-import { Stream, joinStreams } from './Stream'
+import { Stream, joinStreams, PipeReceiver } from './Stream'
 import { blockToString } from './Debug'
 import { Query, QueryTuple } from './Query'
 import { Graph } from './Graph'
@@ -50,10 +50,8 @@ const builtinFunctions = {
     output_done: (step: Step) => {
         step.output.done();
     },
-    join_streams: (count, output) => {
-        const { receivers, stream } = joinStreams(count);
-        stream.sendTo(output);
-        return receivers;
+    join_streams: (count, output): PipeReceiver[] => {
+        return joinStreams(count, output);
     },
     run_query_with_provider: (graph: Graph, providerId: string, query: Query, input: Stream) => {
         return runQueryWithProvider(graph, providerId, query, input);
@@ -159,7 +157,11 @@ export class Block {
     run_query_with_provider(...ins) { return this.append('run_query_with_provider', ins) }
     send_to(...ins) { return this.append('send_to', ins) }
     output_done(...ins) { return this.append('output_done', ins) }
-    join_streams(...ins) { return this.append('join_streams', ins) }
+    join_streams(...ins) {
+        if (ins.length !== 2)
+            throw new Error('join_streams expected 2 arguments');
+        return this.append('join_streams', ins);
+    }
     get_index(...ins) { return this.append('get_index', ins) }
     new_stream(...ins) { return this.append('new_stream', ins) }
     new_empty_stream(...ins) { return this.append('new_empty_stream', ins) }

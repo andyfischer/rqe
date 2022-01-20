@@ -11,6 +11,7 @@ import { limit } from './limit'
 import { last } from './last'
 import { need } from './need'
 import { one } from './one'
+import { order_by } from './order_by'
 import { rate } from './rate'
 import { rename } from './rename'
 import { reverse } from './reverse'
@@ -18,6 +19,7 @@ import { run_query_with_provider } from './run_query_with_provider'
 import { save_to_csv } from './save_to_csv'
 import { then } from './then'
 import { trace } from './trace'
+import { to_csv } from './to_csv'
 import { wait } from './wait'
 import { where } from './where'
 import { without } from './without'
@@ -36,12 +38,14 @@ function init() {
         last,
         need,
         one,
-        save_to_csv,
-        then,
+        order_by,
         rate,
         rename,
         reverse,
         run_query_with_provider,
+        save_to_csv,
+        then,
+        to_csv,
         trace,
         wait,
         where,

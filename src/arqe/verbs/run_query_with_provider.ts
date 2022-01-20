@@ -1,5 +1,5 @@
 
-import { Stream, joinStreams } from '../Stream'
+import { Stream } from '../Stream'
 import { Step } from '../Step'
 import { prepareTableSearch } from '../PlannedQuery'
 import { shallowCopy } from '../Item'

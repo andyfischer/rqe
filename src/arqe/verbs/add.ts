@@ -1,5 +1,5 @@
 
-import { Stream, joinStreams } from '../Stream'
+import { Stream } from '../Stream'
 import { Step } from '../Step'
 import { prepareTableSearch } from '../PlannedQuery'
 import { shallowCopy } from '../Item'
@@ -24,7 +24,6 @@ function prepare(step: Step, later: Block) {
     updatedStep = later.step_with_verb(updatedStep, 'get');
     updatedStep = later.step_with_input(updatedStep, later.new_stream());
     updatedStep = later.step_with_output(updatedStep, searchReceiver);
-
     prepareTableSearch(step.graph, step, updatedStep, later);
 }
 

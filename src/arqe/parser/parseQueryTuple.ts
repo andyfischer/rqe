@@ -38,7 +38,7 @@ function maybeParseVerbWithCount(it: TokenIterator): QueryTuple {
         tags.push(tag);
 
     return {
-        t: 'queryStep',
+        t: 'tuple',
         verb,
         tags,
     }
@@ -70,7 +70,7 @@ function maybeParseWaitVerb(it: TokenIterator): QueryTuple {
         tags.push(tag);
 
     return {
-        t: 'queryStep',
+        t: 'tuple',
         verb,
         tags,
     }
@@ -123,11 +123,35 @@ function maybeParseRename(it: TokenIterator): QueryTuple {
         tags.push(tag);
 
     return {
-        t: 'queryStep',
+        t: 'tuple',
         verb: 'rename',
         tags,
     }
 }
+
+function maybeParseWhere(it: TokenIterator) {
+    let startPos = it.position;
+
+    if (it.nextText() !== "where")
+        return null;
+
+    it.consume();
+    it.skipSpaces();
+
+    let tags: QueryTag[] = [];
+    for (const tag of parseTags(it))
+        tags.push(tag);
+
+    const conditions = [];
+
+    // TODO
+}
+
+const specialSyntaxPaths = [
+    maybeParseVerbWithCount,
+    maybeParseRename,
+    maybeParseWaitVerb,
+];
 
 function* parseTags(it: TokenIterator) {
     while (true) {
@@ -148,17 +172,11 @@ export function parseQueryTupleFromTokens(it: TokenIterator, ctx: Context): Quer
 
     // Special syntaxes
 
-    const withCount = maybeParseVerbWithCount(it);
-    if (withCount)
-        return withCount;
-
-    const rename = maybeParseRename(it);
-    if (rename)
-        return rename;
-
-    const wait = maybeParseWaitVerb(it);
-    if (wait)
-        return wait;
+    for (const path of specialSyntaxPaths) {
+        const parseSuccess = path(it);
+        if (parseSuccess)
+            return parseSuccess;
+    }
     
     let tags: QueryTag[] = [];
     
@@ -215,7 +233,7 @@ export function parseQueryTupleFromTokens(it: TokenIterator, ctx: Context): Quer
     }
 
     return {
-        t: 'queryStep',
+        t: 'tuple',
         verb: verbTag ? (verbTag.attr as string) : 'get',
         tags,
     }

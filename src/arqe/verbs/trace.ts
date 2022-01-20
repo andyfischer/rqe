@@ -17,7 +17,7 @@ function run(step: Step) {
                 step.output.receive(msg);
 
                 const tuple: QueryTuple = {
-                    t: 'queryStep',
+                    t: 'tuple',
                     tags: step.tuple.tags.map(tag => {
                         if (tag.attr === 'item')
                             return { t: 'tag', attr: 'item', value: { t: 'item', item: msg.item }}

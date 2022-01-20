@@ -190,7 +190,7 @@ function handlePlanTimeVerbs(plannedQuery: PlannedQuery) {
             // Try to pull the attr from this table.
             if (step.tuple.verb === 'get') {
                 const enhancedTuple: QueryTuple = {
-                    t: 'queryStep',
+                    t: 'tuple',
                     verb: step.tuple.verb,
                     tags: step.tuple.tags.concat([{ t: 'tag', attr, value: { t: 'no_value' }}]),
                 }
@@ -198,7 +198,7 @@ function handlePlanTimeVerbs(plannedQuery: PlannedQuery) {
                 const existingMatch = findBestPointMatch(graph, step.tuple);
                 const enhancedMatch = findBestPointMatch(graph, enhancedTuple);
 
-                // If we matched to the same table then we're good to enhance this step.
+                // If we still matched to the same table then we're good to enhance this step.
                 if (existingMatch && enhancedMatch && existingMatch.point === enhancedMatch.point) {
                     replaceOnePlannedStep(plannedQuery, fixedSteps, stepIndex, enhancedTuple);
                     return;
@@ -301,7 +301,7 @@ function optimizeForProviders(plannedQuery: PlannedQuery) {
             }
 
             wipProviderQuery = {
-                t: 'queryStep',
+                t: 'tuple',
                 verb: 'run_query_with_provider',
                 tags: [{
                     t: 'tag',
@@ -378,7 +378,7 @@ export function prepareTableSearch(graph: Graph, step: Step, runtimeStep: Input,
     }
 
     const point = match.point;
-    later.call_mount_point(point.getRef(), later.namedInput('step'));
+    later.call_mount_point(point.getRef(), runtimeStep);
 }
 
 function prepareTableSearchUsingFrom(graph: Graph, step: Step, runtimeStep: Input, later: Block) {
@@ -410,7 +410,7 @@ function prepareTableSearchUsingFrom(graph: Graph, step: Step, runtimeStep: Inpu
         remainingCommand = remainingCommand.addAttrs(missingAttrs);
     }
 
-    const match = getQueryMountMatch({ t: 'queryStep', verb: null, tags: remainingCommand.tags }, point);
+    const match = getQueryMountMatch({ t: 'tuple', verb: null, tags: remainingCommand.tags }, point);
 
     if (!match) {
         const { missingRequired, missingRequiredValue, extraAttrs } = explainWhyQueryFails(remainingCommand, point);
