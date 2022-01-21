@@ -2,7 +2,7 @@
 
 export type AttrValue = boolean | number | string | null | Buffer | any
 
-export type Item = {
+export type Item = any | {
     [attr: string]: AttrValue
 }
 

@@ -16,6 +16,7 @@ until the input stream is completely done before sending any outputs.
 | one               | stream | Outputs a single item.     |
 | rename `<x> -> <y>`     | stream | Transforms incoming values so that attribute `<x>` is renamed to `<y>` |
 | reverse           | aggregate | Collects all the incoming items and then outputs them in reverse order. |
+| to_csv           | aggregate | Collect items and format them into a CSV. Outputs a single `{ buffer:Buffer }` item |
 | value `<item>`      | stream | Sends the <item> parameter as an output value. |
 | where `<condition>` | stream | Filters the outputs to only include items matching the condition. |
 | without `<attributes>` | aggregate | Transforms values to not include the given `<attributes>`. |
