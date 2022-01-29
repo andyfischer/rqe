@@ -8,5 +8,5 @@
 
 |  Package | Description |
 |  --- | --- |
-|  [tiny-memory-db](./tiny-memory-db.md) |  |
+|  [rqe](./rqe.md) |  |
 

@@ -1,17 +1,21 @@
 
-# tiny-memory-db #
+# RQE #
+
+Relational query engine
 
 Zero-dependency library for doing database operations on in-memory data.
 
+Inspired by relational algebra theory, but the query syntax is not SQL.
+
 # Documentation #
 
-See: https://andyfischer.github.io/tiny-memory-db
+See: https://andyfischer.github.io/rqe
 
 # Quick Example #
 
 Create a table:
 
-    import { Table } from 'tiny-memory-db';
+    import { Table } from 'rqe';
 
     ...
 

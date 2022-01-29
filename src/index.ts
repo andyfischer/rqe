@@ -1,2 +1,2 @@
 
-export { newGraph, Graph, Table, Stream } from './arqe'
+export { newGraph, Graph, Table, Stream } from './rqe'

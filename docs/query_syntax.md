@@ -3,20 +3,17 @@
 
 This library has its own query syntax for fetching and transforming data.
 
-The syntax was inspired by various data transformation syntaxes out there,
-including the one used by [Sumo Logic](https://help.sumologic.com/01Start-Here/Quick-Start-Tutorials).
+We looked at the best syntaxes out there for relational engines, including SQL, but found SQL
+to be overly verbose, and hard to compose and build. (see ["against SQL"](https://www.scattered-thoughts.net/writing/against-sql/))
 
-We looked at the best syntaxes out there for relational engines like SQL, but found SQL
-to be overly verbose, and hard to compose / chain. So here's what we came up with.
+Looking at modern systems that have the most user-friendly queries for fetching data,
+(specifically looking at Splunk, Sumologic, and Datadog), there are a few common trends that
+we copied in the syntax for RQE:
 
-Compared to SQL, the builtin syntax:
+ - Multistep queries are built using a left-to-right Unix-style piping syntax (`|`), instead of SQL's CTEs.
+ - Don't need to specify the name of the table (no FROM keyword)
 
- - Does not use the FROM keyword at all. The appropriate table is found just based on
-   which attributes (aka columns) are mentioned.
- - Chains together steps with the pipe operator `|` for operations like sorting, limiting, 
-   additional filtering, etc.
-
-Note that we ARE planning to also support for SQL syntax at some point.
+Note that we might add support for SQL syntax in the future since many people love it.
 
 ### Example queries ###
 
@@ -28,15 +25,13 @@ Fetch the name associated with a certain user_id:
 
     user_id=xyz name
 
-Fetch up to 10 users:
+Fetch up to 10 users by adding `| limit 10` to the above.
 
     user_id name | limit 10
 
-### Compared with SQL ###
+### Some examples compared with SQL ###
 
-Fetch items from a table.
-
-| description | tiny-memory-db | SQL |
+| description | RQE | SQL |
 | ----------- | -------------- | --- | 
 | Fetch items from a table | `user_id name` | `SELECT user_id, name from user` |
 | Limit results | `user_id name \| limit 10` | `SELECT user_id, name from user LIMIT 10` |

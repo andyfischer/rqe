@@ -8,7 +8,7 @@ A Table is an in-memory list of items, possibly with some lookup indexes attache
 A Table contains *items* (aka "rows"). Each item has *attributes* (aka "columns"). Items are stored
 as plain Javascript objects.
 
-When creating a new table, you can either create one as part of a [Graph]('./tiny-memory-db.graph.md'), 
+When creating a new table, you can either create one as part of a [Graph]('./rqe.graph.md'), 
 or a standalone table. Adding it to a Graph helps if you're planning to make queries that can
 potentially query multiple tables.
 
@@ -18,7 +18,7 @@ Creating a table on a Graph:
 
 Creating a standalone table:
 
-    import { Table } from 'tiny-memory-db'
+    import { Table } from 'rqe'
     const table = new Table({ ... config ... });
 
 ### Constructor config ###

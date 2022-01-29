@@ -1,8 +1,8 @@
 
 # Making queries #
 
-To start making tables, you'll either need a [Graph]('./tiny-memory-db.graph.md') or
-a [Table]('./tiny-memory-db.graph.md') instance.
+To start making tables, you'll either need a [Graph]('./rqe.graph.md') or
+a [Table]('./rqe.graph.md') instance.
 
 The call is:
 
@@ -14,7 +14,7 @@ or
 
 ### Example ###
 
-    import { Graph } from 'tiny-memory-db'
+    import { Graph } from 'rqe'
 
     const graph = new Graph();
     // ... set up tables ...
@@ -23,13 +23,13 @@ or
 
 ### Using results: ###
 
-The result is a [Stream](./tiny-memory-db.stream.md) instance. There are a few ways
+The result is a [Stream](./rqe.stream.md) instance. There are a few ways
 to use the data from a Stream:
 
 #### Asynchronously get a Table ####
 
 Streams implement the Promise API, so they can be resolved as a promise. The result
-is a [Table](./tiny-memory-db.table.md) instance.
+is a [Table](./rqe.table.md) instance.
 
     const table: Table = await graph.query('user name');
 
@@ -61,7 +61,7 @@ it for arbitrary queries.
 
 ### Using a Table result ###
 
-Some operations return a [Table](./tiny-memory-db.table.md) instance which is basically an
+Some operations return a [Table](./rqe.table.md) instance which is basically an
 in-memory list of items.
 
 A quick guide to using items from the Table:
