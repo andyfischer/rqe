@@ -6,9 +6,9 @@ where a query can be resolved using your own custom function (instead of a Table
 
 ### Quick example
 
-The easiest way is with [`Graph.func`](./tiny-memory-db.graph.func.md):
+The easiest way is with [`Graph.func`](./rqe.graph.func.md):
 
-    import { Graph } from 'tiny-memory-db';
+    import { Graph } from 'rqe';
     
     let graph = new Graph();
 

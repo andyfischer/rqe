@@ -1,9 +1,7 @@
 
-# RQE #
+# RQE - Relational Query Engine #
 
-Relational query engine
-
-Zero-dependency library for doing database operations on in-memory data.
+Zero-dependency Javascript library for doing database stuff with in-memory functions and data
 
 Inspired by relational algebra theory, but the query syntax is not SQL.
 

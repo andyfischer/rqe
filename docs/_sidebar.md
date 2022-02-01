@@ -8,7 +8,7 @@
 
 # API
 
-* [Graph](./tiny-memory-db.graph.md)
-* [Step](./tiny-memory-db.step.md)
-* [Stream](./tiny-memory-db.stream.md)
-* [Table](./tiny-memory-db.table.md)
+* [Graph](./rqe.graph.md)
+* [Step](./rqe.step.md)
+* [Stream](./rqe.stream.md)
+* [Table](./rqe.table.md)

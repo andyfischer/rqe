@@ -1,7 +1,9 @@
 
-# tiny-memory-db #
+# RQE - Relational Query Engine #
 
-Zero-dependency library for doing database-like operations on in-memory data.
+Zero-dependency Javascript library for doing database stuff with in-memory functions and data
+
+Inspired by relational algebra theory, but the query syntax is not SQL.
 
 [Query Syntax](./query_syntax.md)
 
@@ -9,7 +11,7 @@ Zero-dependency library for doing database-like operations on in-memory data.
 
 Create a table:
 
-    import { Table } from 'tiny-memory-db';
+    import { Table } from 'rqe';
 
     ...
 
