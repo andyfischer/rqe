@@ -1,6 +1,7 @@
 
 import { has, get, attrs } from '../Item'
 import { Table } from '../Table'
+import { formatValue } from './formatItem'
 
 class LazyMap<K,V> {
     m = new Map<K,V>()
@@ -36,24 +37,8 @@ class Column {
         this.title = title;
     }
 
-    cellValueToString(v: any) {
-        switch (typeof v) {
-        case 'string':
-            return v;
-        case 'number':
-        case 'boolean':
-            return v + '';
-            return v + '';
-        }
-
-        if (v == null)
-            return '';
-
-        return JSON.stringify(v);
-    }
-
     formatCell(v: any) {
-        const s: string = this.cellValueToString(v) || '';
+        const s: string = formatValue(v);
         return rightPadSpaces(s, this.width);
     }
 }
@@ -95,7 +80,7 @@ export default function printAsTable(rel: Table): string[] {
         for (const attr of attrs(item)) {
             const column: Column = columns.get(attr);
             const value = get(item, attr);
-            const str = column.cellValueToString(value);
+            const str = formatValue(value);
             column.items.push(str);
         }
     }
@@ -147,7 +132,7 @@ export function printItemsAsTable(items: any[]): string[] {
         for (const attr of attrs(item)) {
             const column: Column = columns.get(attr);
             const value = get(item, attr);
-            const str = column.cellValueToString(value);
+            const str = formatValue(value);
             column.items.push(str);
         }
     }

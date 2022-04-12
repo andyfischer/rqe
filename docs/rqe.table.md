@@ -28,7 +28,7 @@ export declare class Table<ItemType = any>
 |  [itemChangeListeners?](./rqe.table.itemchangelisteners.md) |  | ItemChangeListener\[\] | <i>(Optional)</i> |
 |  [items](./rqe.table.items.md) |  | Map&lt;number, ItemType&gt; |  |
 |  [name](./rqe.table.name.md) |  | string |  |
-|  [nextInternalID](./rqe.table.nextinternalid.md) |  | IDSource |  |
+|  [nextInternalID](./rqe.table.nextinternalid.md) |  | IDSourceNumber |  |
 |  [primaryUniqueAttr?](./rqe.table.primaryuniqueattr.md) |  | string | <i>(Optional)</i> |
 |  [references](./rqe.table.references.md) |  | Reference\[\] |  |
 |  [schema](./rqe.table.schema.md) |  | TableSchema |  |

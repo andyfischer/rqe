@@ -7,5 +7,5 @@
 <b>Signature:</b>
 
 ```typescript
-nextInternalID: IDSource;
+nextInternalID: IDSourceNumber;
 ```

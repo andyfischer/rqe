@@ -8,8 +8,8 @@
 
 **/
 
-import { Graph } from './Graph'
-import { Query, QueryLike, rewriteQueryTags } from './Query'
+
+import { Query } from './Query'
 
 export type DynamicValues = { [attr: string]: any }
 
@@ -21,6 +21,8 @@ export class StoredQuery {
     }
 
     withValues(values: DynamicValues): Query {
+        throw new Error('todo');
+        /*
         const ref = { query: this.query }
         for (const [ tag, getWritableTag ] of rewriteQueryTags(ref)) {
             if (values[tag.attr]) {
@@ -28,5 +30,6 @@ export class StoredQuery {
             }
         }
         return ref.query;
+        */
     }
 }

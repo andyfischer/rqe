@@ -1,33 +1,32 @@
 
 import { IDSource } from './utils/IDSource'
-import { Table } from './Table/index'
-import { Scope } from './Scope'
+import { Table } from './Table'
 import { Stream } from './Stream'
-import { Setup, SetupCallback } from './Setup'
 import { Module } from './Module'
-import { QueryTag, QueryLike, toQuery, Query, QueryTuple } from './Query'
+import { QueryLike, toQuery, Query, QueryStep } from './Query'
 import { StoredQuery } from './StoredQuery'
-import { setupMap, MapMountConfig, setupObject, ObjectMountConfig, setupList, ListMountConfig } from './datastructures'
-import { mountTable as mountMemoryTable, TableMountConfig } from './Table/mountTable'
-import { TableSchema, LooseTableSchema, setupWithMountSpec, fixLooseSchema } from './Schema'
+import { setupMap, MapMountConfig, setupObject, ObjectMountConfig, getListMount, ListMountConfig,
+    getTableMount, TableMountConfig, setupFunction } from './mountlib'
+import { LooseTableSchema, fixLooseSchema } from './Schema'
 import { ItemChangeListener } from './reactive/ItemChangeEvent'
-import { applyChangeToMountedTable } from './reactive/changePropogation'
 import { randomHex } from './utils/randomHex'
 import { applyTransform } from './Transform'
 import { Item } from './Item'
-import { setupBrowse } from './Browse'
+import { setupBrowse } from './mountlib/browseGraph'
 import { ItemCallback, toTableBind, itemCallbackToHandler } from './Setup'
 import { PlannedQuery } from './Planning'
 import { MountPointRef } from './FindMatch'
 import { RunningQuery } from './RunningQuery'
 import { graphToString } from './Debug'
 import { Provider, newProviderTable } from './Providers'
-import { MountPoint } from './MountPoint'
+import { MountPoint, MountPointSpec } from './MountPoint'
 import { setupLoggingSubsystem, EmptyLoggingSubsystem } from './LoggingSubsystem'
-import { getQueryMountMatch, QueryMountMatch } from './FindMatch'
-import { AstModification } from './Block'
+import { getQueryMountMatch } from './FindMatch'
 import { Verb } from './verbs/_shared'
 import { getVerb } from './verbs/_list'
+import { callPoint } from './CallPoint'
+import { CustomType } from './CustomType'
+import { CollectedMountGraph } from './CollectedMounts'
 
 let _nextGraphID = new IDSource('graph-');
 
@@ -35,12 +34,12 @@ export interface QueryExecutionContext {
     env?: {
         [key: string]: any
     }
-    parameters?: {
-        [key: string]: any
-    }
-    mod?: AstModification
-    input?: Stream
     readonly?: boolean
+}
+
+export interface QueryParameters {
+    '$input'?: Stream
+    [name: string]: any
 }
 
 export class Graph {
@@ -57,13 +56,15 @@ export class Graph {
     tableRedefineOnExistingName = false
     logging = new EmptyLoggingSubsystem()
     customVerbs: Table<{ name: string, def: Verb}>
+    customTypes: Table<{ name: string, def: CustomType}>
+    _collectedMounts: CollectedMountGraph
 
     constructor() {
         this.graphId = _nextGraphID.take() + randomHex(6);
     }
 
     setupBrowse() {
-        this.createModule(setup => setupBrowse(setup));
+        this.createModuleV2(setupBrowse(this));
     }
 
     enableLogging() {
@@ -89,12 +90,7 @@ export class Graph {
         
         this.tables.set(id, table);
         this.tablesByName.set(table.name, table);
-
-        let setup = new Setup();
-        setup = setupWithMountSpec(schema.mount, setup);
-
-        mountMemoryTable(setup, table, opts);
-        this.createModule(setup);
+        this.mountTable(table, opts);
     }
 
     newTable<T = any>(schema?: LooseTableSchema): Table<T> {
@@ -110,51 +106,43 @@ export class Graph {
         return table;
     }
 
+    mount(points: MountPointSpec[]) {
+        const module = this.createEmptyModule();
+        module.redefine(points);
+        return module;
+    }
+
     mountMap(config: MapMountConfig) {
-        const setup = new Setup();
-        setupMap(setup, config);
-        this.createModule(setup);
+        this.createModuleV2(setupMap(config));
     }
 
     mountObject(config: ObjectMountConfig) {
-        const setup = new Setup();
-        setupObject(setup, config);
-        return this.createModule(setup);
+        return this.createModuleV2(setupObject(config));
     }
 
     mountList(config: ListMountConfig) {
-        return this.createModule(setup => {
-            setupList(setup, config);
-        });
+        const module = this.createEmptyModule();
+        module.redefine(getListMount(config));
+        return module;
     }
 
     func(decl: string, callback: ItemCallback) {
-        return this.createModule(setup => {
-            setup.table(toTableBind(decl, itemCallbackToHandler(callback)));
-        });
+        return this.createModuleV2([setupFunction(decl, callback)]);
     }
 
-    mountTable(table: Table) {
-        return this.createModule(setup => {
-            mountMemoryTable(setup, table);
-        });
+    mountTable(table: Table, opts: TableMountConfig = {}) {
+        const module = this.createEmptyModule();
+        module.redefine(getTableMount(table, opts));
+        return module;
     }
 
-    *everyTable() {
+    *everyMountPoint() {
         for (const module of this.modules)
             yield* module.points;
     }
 
-    *everyMountPoint() {
-        for (let moduleIndex=0; moduleIndex < this.modules.length; moduleIndex++) {
-            const module = this.modules[moduleIndex];
-            for (const point of module.points)
-                yield point;
-        }
-    }
-
-    *getQueryMountMatches(tuple: QueryTuple) {
-        for (const point of this.everyTable()) {
+    *getQueryMountMatches(tuple: QueryStep) {
+        for (const point of this.everyMountPoint()) {
             const match = getQueryMountMatch(tuple, point);
 
             if (match)
@@ -177,16 +165,9 @@ export class Graph {
         return null;
     }
 
-    createModule(setup: Setup | SetupCallback) {
-        let setupObj;
-        if (setup instanceof Setup)
-            setupObj = setup;
-        else {
-            setupObj = new Setup();
-            setup(setupObj);
-        }
+    createModuleV2(points: MountPointSpec[]) {
         const module = this.createEmptyModule();
-        module.redefine(setupObj.toMountSpec());
+        module.redefine(points);
         return module;
     }
 
@@ -197,11 +178,30 @@ export class Graph {
         return module;
     }
 
-    query(queryLike: QueryLike, parameters: any = {}, context: QueryExecutionContext = {}) {
+    query(queryLike: QueryLike, parameters: QueryParameters = {}, context: QueryExecutionContext = {}) {
         const query = toQuery(queryLike, { graph: this });
         const planned = new PlannedQuery(this, query, context);
-        const running = new RunningQuery(this, planned, context);
+        const running = new RunningQuery(this, planned, parameters, context);
         return running.output;
+    }
+
+    transform(queryLike: QueryLike, items: Item[], parameters: QueryParameters = {}, context: QueryExecutionContext = {}) {
+        const query = toQuery(queryLike, { graph: this });
+
+        if (query.steps[0].verb === 'get')
+            throw new Error("Expected a transforming query: " + queryLike);
+
+        const planned = new PlannedQuery(this, query, context);
+
+        parameters.$input = Stream.fromList(items);
+        const running = new RunningQuery(this, planned, parameters, context);
+        return running.output;
+    }
+
+    planQuery(queryLike: QueryLike, context: QueryExecutionContext = {}) {
+        const query = toQuery(queryLike, { graph: this });
+        const planned = new PlannedQuery(this, query, context);
+        return planned;
     }
 
     put(object: any): Stream {
@@ -219,6 +219,10 @@ export class Graph {
 
     prepareTransform(queryLike: QueryLike): Query {
         return toQuery(queryLike, { graph: this });
+    }
+
+    callMountPoint(context: QueryExecutionContext, pointRef: MountPointRef, tuple: QueryStep, input: Stream, output: Stream) {
+        callPoint(this, context, pointRef, tuple, input, output);
     }
 
     applyTransform(items: Item[], queryLike: QueryLike): Stream {
@@ -250,12 +254,8 @@ export class Graph {
     addCustomVerb(name: string, def: Verb) {
         if (!this.customVerbs) {
             this.customVerbs = this.newTable({
-                attrs: {
-                    name: {},
-                    def: {},
-                },
                 funcs: [
-                    'name ->'
+                    'name -> def'
                 ]
             });
         }
@@ -273,8 +273,41 @@ export class Graph {
         return getVerb(name);
     }
 
+    addCustomType(name: string, def: CustomType) {
+        if (!this.customTypes) {
+            this.customTypes = this.newTable({
+                attrs: {
+                    name: {},
+                    def: {},
+                },
+                funcs: [
+                    'name ->'
+                ],
+            });
+        }
+
+        this.customTypes.put({name,def});
+    }
+
+    getCustomType(name: string) {
+        if (this.customTypes) {
+            const found = this.customTypes.one({name});
+            return found.def;
+        }
+    }
+
+    newStream(label?: string) {
+        return new Stream(label);
+    }
+
     str(options: { reproducible?: boolean } = {}) {
         return graphToString(this, options);
+    }
+
+    collectedMounts() {
+        if (!this._collectedMounts)
+            this._collectedMounts = new CollectedMountGraph(this);
+        return this._collectedMounts;
     }
 }
 

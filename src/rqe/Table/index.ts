@@ -7,17 +7,19 @@ import { ItemChangeListener } from '../reactive/ItemChangeEvent'
 import { fixLooseSchema, findUniqueAttr, LooseTableSchema, IndexConfiguration } from '../Schema'
 import TableIndex from './TableIndex'
 import { IDSourceNumber as IDSource } from '../utils/IDSource'
-import { formatItem } from '../formatToString'
+import { formatItem } from '../format/formatItem'
 import { assert } from '../utils/assert'
-import { PipeError } from '../Stream'
 import { MemoryTableExtraErrorMessages } from '../config'
-import { ErrorItem, ErrorTableSchema, newErrorTable, errorItemToString } from '../Errors'
-import { parseTableDecl } from '../parser'
-import { tableToString } from '../Debug'
-import { ObjectHeader, initRowInfo, withoutHeader, clearHeader, header, itemGlobalId } from './ObjectHeader'
-import { UniquenessConstraint, RequiredAttrConstraint, Constraint } from './Constraints'
+import { ErrorItem, newErrorTable, errorItemToString } from '../Errors'
+import { tableSchemaToString } from '../Debug'
+import { initRowInfo, withoutHeader, clearHeader, header, itemGlobalId } from './ObjectHeader'
+import { Constraint } from './Constraints'
 import { QueryLike } from '../Query'
 import { Stream } from '../Stream'
+import { formatTable } from '../format/TableFormatter'
+import { has, Item } from '../Item'
+
+export * from './toTable'
 
 const ConfigFrequentValidation = true;
 
@@ -115,12 +117,15 @@ function listToMap(list: string[]) {
 
 interface SetupOptions {
     tableId?: string
+    owner?: Graph
 }
 
 export class Table<ItemType = any> {
 
+    t = 'table'
     name: string
     tableId: string
+    owner: Graph
 
     indexes: TableIndex<ItemType>[] = []
     indexesBySingleAttr = new Map<string, TableIndex<ItemType>>()
@@ -134,6 +139,7 @@ export class Table<ItemType = any> {
     nextInternalID = new IDSource()
     items = new Map<number, ItemType>()
     _errors: Table<ErrorItem>
+    _headers: Table<Item>
 
     constructor(looseSchema: LooseTableSchema, setupOptions: SetupOptions = {}) {
         const schema = fixLooseSchema(looseSchema);
@@ -142,6 +148,7 @@ export class Table<ItemType = any> {
         Object.freeze(schema.funcs);
         Object.freeze(schema);
 
+        this.owner = setupOptions.owner;
         this.name = schema.name;
         this.schema = schema;
         this.tableId = setupOptions.tableId;
@@ -203,27 +210,16 @@ export class Table<ItemType = any> {
             this.references.push(foreignKeyConfig);
         }
 
-        for (const funcDecl of schema.funcs || []) {
-            const parsed = parseTableDecl(funcDecl);
-            if (parsed.t === 'parseError')
-                throw new Error("Error parsing decl: " + parsed);
-
-            const attrs = [];
-            for (const [ attr, config ] of Object.entries(parsed.attrs))
-                if (config.required)
-                    attrs.push(attr);
-
-            this._newIndex({
-                attrs
-            });
-        }
-
         const [ primaryUniqueAttr, _] = findUniqueAttr(schema);
         this.primaryUniqueAttr = primaryUniqueAttr;
 
         for (const item of (schema.initialItems || [])) {
             this.put(item as ItemType);
         }
+    }
+
+    size() {
+        return this.items.size;
     }
 
     getEffectiveAttrs(): string[] {
@@ -320,9 +316,12 @@ export class Table<ItemType = any> {
     }
 
     hasIndexForAttrs(attrs: string[]) {
-        const attrsMap = listToMap(attrs);
+        const item = {};
+        for (const attr of attrs)
+            item[attr] = null;
+
         for (const index of this.indexes) {
-            if (index.coversAttrs(attrsMap)) {
+            if (index.coversItem(item)) {
                 return true;
             }
         }
@@ -370,8 +369,6 @@ export class Table<ItemType = any> {
         // Prepare incoming data (add generated elements)
         this._beforePut(newItem);
 
-        const attrs = objectToMap(newItem);
-
         let overwriteItem = null;
 
         // Check constraints
@@ -379,12 +376,12 @@ export class Table<ItemType = any> {
             switch (constraint.constraintType) {
 
             case 'required_attr':
-                if (!attrs.has(constraint.attr))
+                if (!has(newItem, constraint.attr))
                     throw this.usageError("put() failed, missing required attr: " + constraint.attr);
                 break;
 
             case 'unique': {
-                const indexKey = constraint.index.toKey(attrs);
+                const indexKey = constraint.index.toKeyUsingItem(newItem);
 
                 if (!indexKey)
                     continue;
@@ -447,8 +444,8 @@ export class Table<ItemType = any> {
 
         // Update any relevant indexes.
         for (const index of this.indexes) {
-            if (index.coversAttrs(attrs)) {
-                index.insert(tableInternalKey, attrs, newItem);
+            if (index.coversItem(newItem)) {
+                index.insert(newItem);
             }
         }
 
@@ -514,6 +511,12 @@ export class Table<ItemType = any> {
         this._errors.put(item);
     }
 
+    putHeader(item: Item) {
+        if (!this._headers)
+            this._headers = new Table({});
+        this._headers.put(item);
+    }
+
     *where(where: any): IterableIterator<ItemType> {
         // Check if this has no clause.
         if (!where) {
@@ -575,9 +578,6 @@ export class Table<ItemType = any> {
         return null;
     }
 
-    size() {
-        return this.items.size;
-    }
 
     list(): ItemType[] {
         return Array.from(this.items.values());
@@ -635,27 +635,27 @@ export class Table<ItemType = any> {
         return Array.from(this.where(where));
     }
 
-    strs() {
-        const out: string[] = [];
+    update(where: any, updater: (item: ItemType) => ItemType, changeInfo?: any) {
+        for (const item of this.where(where)) {
 
-        if (this.hasError()) {
-            for (const error of this._errors.scan()) {
-                out.push('# ' + errorItemToString(error));
+            // Remove old value from indexes.
+            for (const index of this.indexes) {
+                if (index.coversItem(item))
+                    index.remove(item);
+            }
+
+            updater(item);
+
+            // Add new value to indexes
+            for (const index of this.indexes) {
+                if (index.coversItem(item))
+                    index.insert(item);
+            }
+
+            for (const listener of (this.itemChangeListeners || [])) {
+                listener({ verb: 'update', item, writer: changeInfo && changeInfo.writer });
             }
         }
-
-        for (const item of this.scan())
-            out.push(formatItem(item));
-
-        return out;
-    }
-
-    export() {
-        const out = [];
-        for (const item of this.scan()) {
-            out.push(withoutHeader(item));
-        }
-        return out;
     }
 
     _deleteOne(item: ItemType, changeInfo?: any) {
@@ -668,10 +668,9 @@ export class Table<ItemType = any> {
         this.items.delete(itemHeader.tableInternalKey);
 
         // Update indexes
-        const attrs = objectToMap(item);
         for (const index of this.indexes) {
-            if (index.coversAttrs(attrs)) {
-                index.remove(itemHeader.tableInternalKey, attrs, item);
+            if (index.coversItem(item)) {
+                index.remove(item);
             }
         }
 
@@ -762,6 +761,11 @@ export class Table<ItemType = any> {
             throw this.errorsToException();
     }
 
+    rebuildIndexes() {
+        for (const index of this.indexes)
+            index.rebuild();
+    }
+
     query(queryLike: QueryLike, parameters: any = {}, context: QueryExecutionContext = {}): Stream {
         // Create a throwaway Graph for this query.
         const graph = new Graph();
@@ -770,6 +774,30 @@ export class Table<ItemType = any> {
     }
 
     str() {
-        return tableToString(this);
+        return tableSchemaToString(this);
+    }
+
+    strs() {
+        const out: string[] = [];
+
+        if (this.hasError()) {
+            for (const error of this._errors.scan()) {
+                out.push('# ' + errorItemToString(error));
+            }
+        }
+
+        for (const item of this.scan())
+            out.push(formatItem(item));
+
+        return out;
+    }
+
+    dump() {
+        let out = [];
+        out.push(`[${this.name}]`);
+        for (const line of formatTable(this)) {
+            out.push(line);
+        }
+        return out.join('\n');
     }
 }

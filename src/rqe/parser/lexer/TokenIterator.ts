@@ -11,8 +11,9 @@ export class TokenIterator {
     sourceText?: LexedText
     settings: LexerSettings
 
-    constructor(tokens: Token[], settings: LexerSettings = {}) {
-        this.tokens = tokens;
+    constructor(text: LexedText, settings: LexerSettings = {}) {
+        this.tokens = text.tokens;
+        this.sourceText = text;
         this.settings = settings;
     }
 
@@ -20,10 +21,13 @@ export class TokenIterator {
         return this.position;
     }
 
+    restore(position: number) {
+        this.position = position;
+    }
+
     copy() {
-        const it = new TokenIterator(this.tokens);
+        const it = new TokenIterator(this.sourceText);
         it.position = this.position;
-        it.sourceText = this.sourceText;
         return it;
     }
 
@@ -118,7 +122,7 @@ export class TokenIterator {
 
     consume(match: TokenDef = null) {
         if (match !== null && !this.nextIs(match))
-            throw new Error(`expected token: ${match.name}, found: ${this.next().match.name}`);
+            throw new Error(`expected token: ${match?.name}, found: ${this.next().match?.name} (${this.nextText()})`);
 
         this.advance();
     }

@@ -1,6 +1,5 @@
 
 import { Step } from '../Step'
-import { Stream } from '../Stream'
 
 function run(step: Step) {
     const duration = parseInt(step.get('duration'), 10);

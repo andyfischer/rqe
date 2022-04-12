@@ -1,6 +1,5 @@
 
 import { Table } from '../Table'
-import Debounce from '../utils/Debounce'
 import { applyChangeList } from './changePropogation'
 import { connectDistributedTable } from './distributedTable'
 import { Graph } from '../Graph'

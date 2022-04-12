@@ -1,7 +1,7 @@
 
 import consolePrintTable from './consolePrintTable'
 import { attrs } from '../Item'
-import { formatItem } from '../formatToString'
+import { formatItem } from './formatItem'
 import { Table } from '../Table'
 
 function isMultiColumn(rel: Table) {

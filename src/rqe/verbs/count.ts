@@ -1,24 +1,25 @@
 
 import { Step } from '../Step'
-import { Graph } from '../Graph'
-import { QueryTuple, QueryTag, tagsToItem, withVerb } from '../Query'
-import { Block } from '../Block'
-import { PrepareParams } from '../Planning'
-
-function prepare({graph, later, tuple}: PrepareParams) {
-    later.planned_put(later.output(), { count: null });
-}
 
 function run(step: Step) {
+
+    const { input, output } = step;
+
+    if (step.schemaOnly) {
+        output.put({ count: null });
+        output.done();
+        return;
+    }
+
     let count = 0;
 
-    step.input.sendTo({
+    input.sendTo({
         receive(data) {
             switch (data.t) {
 
             case 'done': {
-                step.output.put({ count });
-                step.output.done();
+                output.put({ count });
+                output.done();
                 break;
             }
 
@@ -28,13 +29,12 @@ function run(step: Step) {
             }
 
             default:
-                step.output.receive(data);
+                output.receive(data);
             }
         }
     });
 }
 
 export const count = {
-    prepare,
     run,
 }

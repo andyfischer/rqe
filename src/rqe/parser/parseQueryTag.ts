@@ -1,19 +1,26 @@
 
-import { TokenIterator, Token, TokenDef, t_plain_value, t_quoted_string, t_star,
-    t_space, t_hash, t_newline, t_bar, t_slash,
+import { TokenIterator, t_plain_value, t_star, t_slash,
     t_dot, t_question, t_integer, t_dash, t_dollar, t_lbracket, t_rbracket,
     t_lparen, t_rparen, t_equals, t_double_dash, lexStringToIterator } from './lexer'
-import { QueryTag } from '../Query'
-import { TaggedValue } from '../TaggedValue'
+import { Query, QueryStep, QueryTagEntry } from '../Query'
 import { parseQueryFromTokens } from './parseQuery'
+import { ParseError } from './ParseError'
 
-export function parseQueryTagFromTokens(it: TokenIterator): QueryTag {
+export function parseQueryTagFromTokens(it: TokenIterator): QueryTagEntry {
 
-    let identifier = null;
+    const result: QueryTagEntry = {
+        attr: null,
+        tag: {
+            t: 'tag',
+            value: {
+                t: 'no_value'
+            }
+        }
+    }
 
     // Identifier prefix
     if (it.tryConsume(t_lbracket)) {
-        identifier = it.consumeAsText();
+        result.tag.identifier = it.consumeAsText();
 
         if (!it.tryConsume(t_rbracket))
             throw new Error("expected ']', found: " + it.nextText());
@@ -22,54 +29,57 @@ export function parseQueryTagFromTokens(it: TokenIterator): QueryTag {
     }
 
     if (it.tryConsume(t_star)) {
-        return {
-            t: 'tag',
-            specialAttr: { t: 'star' },
-            value: { t: 'no_value' },
-            identifier,
-        }
+        result.tag.specialAttr = { t: 'star' };
+        return result;
     }
 
     if (it.tryConsume(t_dollar)) {
         const unboundVar = it.consumeAsUnquotedText();
-        return {
-            t: 'tag',
-            specialAttr: { t: 'star' },
-            value: { t: 'no_value' },
-            identifier: unboundVar,
-        }
+        result.attr = unboundVar;
+        result.tag.identifier = unboundVar;
+        return result;
     }
 
-    let isFlag = false;
     if (it.tryConsume(t_double_dash))
-        isFlag = true;
+        result.tag.isFlag = true;
 
     // Attribute
-    let attr = it.consumeAsUnquotedText();
+    result.attr = it.consumeAsUnquotedText();
     while (it.nextIs(t_plain_value)
             || it.nextIs(t_dot)
             || it.nextIs(t_dash)
             || it.nextIs(t_integer)
             || it.nextIs(t_slash))
-        attr += it.consumeAsUnquotedText();
+        result.attr += it.consumeAsUnquotedText();
 
-    if (attr === '/')
+    if (result.attr === '/')
         throw new Error("syntax error, attr was '/'");
 
-    let isOptional = false;
-
     if (it.tryConsume(t_question)) {
-        isOptional = true;
+        result.tag.isOptional = true;
     }
 
-    let value: TaggedValue = {
-        t: 'no_value'
-    };
+    if (it.tryConsume(t_lparen)) {
+        let query: Query | QueryStep | ParseError = parseQueryFromTokens(it, { });
+        if (query.t === 'parseError')
+            throw new Error(query.message);
+
+        // Simplify to just the QueryStep.
+        if (query.t === 'query' && query.steps.length === 1)
+            query = query.steps[0];
+
+        result.tag.value = query;
+
+        if (!it.tryConsume(t_rparen))
+            throw new Error("Expected )");
+
+        return result;
+    }
 
     if (it.tryConsume(t_equals)) {
         it.skipSpaces();
 
-        if (it.nextIs(t_lparen)) {
+        if (it.tryConsume(t_lparen)) {
             const query = parseQueryFromTokens(it, {});
 
             if (query.t === 'parseError')
@@ -78,42 +88,21 @@ export function parseQueryTagFromTokens(it: TokenIterator): QueryTag {
             if (!it.tryConsume(t_rparen))
                 throw new Error('Expected )');
 
-            return {
-                t: 'tag',
-                attr,
-                value: {
-                    t: 'query_value',
-                    query,
-                }
-            }
+            result.tag.value = query;
+        } else {
+
+            let strValue = it.consumeAsUnquotedText();
+            while (it.nextIs(t_plain_value) || it.nextIs(t_dot) || it.nextIs(t_slash))
+                strValue += it.consumeAsUnquotedText();
+
+            result.tag.value = { t: 'str_value', str: strValue };
         }
-
-        let strValue = it.consumeAsUnquotedText();
-        while (it.nextIs(t_plain_value) || it.nextIs(t_dot) || it.nextIs(t_slash))
-            strValue += it.consumeAsUnquotedText();
-
-        value = { t: 'str_value', str: strValue };
     }
-
-    const result: QueryTag = {
-        t: 'tag',
-        attr,
-        value,
-    }
-
-    if (isOptional)
-        result.isOptional = true;
-
-    if (identifier)
-        result.identifier = identifier;
-
-    if (isFlag)
-        result.isFlag = true;
 
     return result;
 }
 
-export function parseQueryTag(str: string): QueryTag {
+export function parseQueryTag(str: string): QueryTagEntry {
     const it = lexStringToIterator(str);
     return parseQueryTagFromTokens(it);
 }

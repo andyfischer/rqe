@@ -1,7 +1,6 @@
 
 import { Step } from '../Step'
 import { Table } from '../Table'
-import * as fs from 'fs'
 import { formatAsCsv } from '../format/csv'
 
 function run(step: Step) {

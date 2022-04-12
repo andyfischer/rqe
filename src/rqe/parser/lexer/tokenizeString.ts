@@ -1,13 +1,13 @@
 
 import Context from './Context'
 import { TokenIterator } from './TokenIterator'
-import Token from './Token'
-import TokenDef from './TokenDef'
 import LexedText from './LexedText'
 import { LexerSettings } from './LexerSettings'
 import { t_ident, t_integer, t_unrecognized, t_space, t_double_dash,
     t_line_comment, t_quoted_string, t_double_equals,
-    t_plain_value, t_gthan, t_right_arrow, t_right_fat_arrow, tokenFromSingleCharCode } from './tokens'
+    t_double_bar, t_double_amp,
+    t_plain_value, t_gthaneq, t_lthaneq, t_right_arrow,
+    t_right_fat_arrow, tokenFromSingleCharCode } from './tokens'
 
 const c_0 = '0'.charCodeAt(0);
 const c_9 = '9'.charCodeAt(0);
@@ -17,6 +17,7 @@ const c_A = 'A'.charCodeAt(0);
 const c_Z = 'Z'.charCodeAt(0);
 const c_dash = '-'.charCodeAt(0);
 const c_gthan = '>'.charCodeAt(0);
+const c_lthan = '<'.charCodeAt(0);
 const c_under = '_'.charCodeAt(0);
 const c_space = ' '.charCodeAt(0);
 const c_equals = '='.charCodeAt(0);
@@ -28,6 +29,8 @@ const c_double_quote = "\"".charCodeAt(0);
 const c_backslash = '\\'.charCodeAt(0);
 const c_exclaim = '!'.charCodeAt(0);
 const c_slash = '/'.charCodeAt(0);
+const c_bar = '|'.charCodeAt(0);
+const c_amp = '&'.charCodeAt(0);
 
 function isLowerCase(c) {
     return c >= c_a && c <= c_z;
@@ -119,6 +122,18 @@ function consumeNext(input: Context) {
     if (c === c_equals && input.next(1) === c_gthan)
         return input.consume(t_right_fat_arrow, 2);
 
+    if (c === c_bar && input.next(1) === c_bar)
+        return input.consume(t_double_bar, 2);
+
+    if (c === c_amp && input.next(1) === c_amp)
+        return input.consume(t_double_amp, 2);
+
+    if (c === c_gthan && input.next(1) === c_equals)
+        return input.consume(t_gthaneq, 2);
+
+    if (c === c_lthan && input.next(1) === c_equals)
+        return input.consume(t_lthaneq, 2);
+
     if (c === c_slash && input.next(1) === c_slash && input.settings.cStyleLineComments)
         return input.consumeWhile(t_line_comment, c => c !== c_newline);
 
@@ -163,12 +178,9 @@ export function tokenizeString(str: string, settings: LexerSettings = {}): Lexed
 
     const result = new LexedText(str);
     result.tokens = context.resultTokens;
-    result.iterator = new TokenIterator(context.resultTokens, settings);
-    result.iterator.sourceText = result;
     return result;
 }
 
 export function lexStringToIterator(str: string): TokenIterator {
-    const { iterator } = tokenizeString(str);
-    return iterator;
+    return new TokenIterator(tokenizeString(str));
 }

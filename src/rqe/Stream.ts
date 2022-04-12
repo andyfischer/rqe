@@ -4,13 +4,15 @@ import { Table } from './Table/index'
 import { c_done, c_item } from './Enums'
 import { ErrorItem, ErrorType } from './Errors'
 import { IDSourceNumber as IDSource } from './utils/IDSource'
+import { streamingTransform, StreamingTransformFunc, StreamingTransformOptions } from './Concurrency'
+import { StreamSuperTrace } from './config'
 
 interface PipeItem {
     t: 'item',
     item: any
 }
 
-interface PipeDone {
+export interface PipeDone {
     t: 'done',
 }
 
@@ -24,10 +26,23 @@ export interface PipeHeader {
     item: Item
 }
 
+export interface AttrSchema {
+    type?: string
+}
+
+export interface SchemaItem {
+   [attr: string]: AttrSchema
+}
+
+export interface PipeSchema {
+    t: 'schema'
+    item: SchemaItem
+}
+
 export type TransformFunc = (item: Item) => Item | Item[]
 export type AggregationFunc = (item: Item[]) => Item | Item[]
 
-export type PipedData = PipeHeader | PipeItem | PipeDone | PipeError 
+export type PipedData = PipeHeader | PipeItem | PipeDone | PipeError | PipeSchema
 
 export interface PipeReceiver {
     receive(data: PipedData): void
@@ -92,14 +107,29 @@ export class Stream {
         return this.receivedDone;
     }
 
+    isKnownEmpty() {
+        return this.receivedDone && !this.downstream && (!this._backlog || this._backlog.length === 0);
+    }
+
+    getDebugLabel() {
+        let out = `#${this.id}`
+        if (this.label)
+            out += ` (${this.label})`;
+        return out;
+    }
+
     receive(data: PipedData) {
+        if (StreamSuperTrace) {
+            console.log(`Stream ${this.getDebugLabel()} received:`, data);
+        }
+
         if (data.t !== 'done' && this._backpressureStop) {
             // console.log('throwing backpressure stop');
             throw new BackpressureStop();
         }
 
         if (this.receivedDone) {
-            throw new Error(`Stream #${this.id} received more data after 'done': ` + JSON.stringify(data))
+            throw new Error(`Stream ${this.getDebugLabel()} received more data after 'done': ` + JSON.stringify(data))
         }
 
         if (data.t === 'done')
@@ -129,25 +159,32 @@ export class Stream {
         }
     }
 
-    transform(receiver: PipeReceiver, callback: TransformFunc) {
+    transform(output: PipeReceiver, callback: TransformFunc) {
         this.sendTo({
             receive: (msg) => {
+
                 switch (msg.t) {
                     case c_item:
 
                         let result = callback(msg.item) || [];
-                        if (!Array.isArray(result))
-                            result = [result];
+                        if (Array.isArray(result)) {
+                            for (const newItem of (result as Item[]))
+                                output.receive({t: c_item, item: newItem });
+                        } else { 
+                            output.receive({t: c_item, item: result });
+                        }
 
-                        for (const newItem of (result as Item[]))
-                            receiver.receive({t: c_item, item: newItem });
 
                         break;
                     default:
-                        receiver.receive(msg);
+                        output.receive(msg);
                 }
             }
         });
+    }
+
+    streamingTransform(output: Stream, callback: StreamingTransformFunc, options: StreamingTransformOptions = {}) {
+        streamingTransform(this, output, callback, options);
     }
 
     aggregate(receiver: PipeReceiver, callback: AggregationFunc) {
@@ -176,9 +213,8 @@ export class Stream {
         });
     }
 
-    // Use as a Promise
-    then(onResolve?: (result: Table) => any, onReject?): Promise<Table> {
-        let promise = new Promise<Table>((resolve, reject) => {
+    async toTable(): Promise<Table> {
+        return new Promise<Table>((resolve, reject) => {
             this.callback(table => {
                 if (table.hasError())
                     reject(table.errorsToException());
@@ -186,6 +222,11 @@ export class Stream {
                     resolve(table);
             });
         });
+    }
+
+    // Use as a Promise
+    then(onResolve?: (result: Table) => any, onReject?): Promise<Table> {
+        let promise = this.toTable();
 
         if (onResolve || onReject)
             promise = promise.then(onResolve, onReject);
@@ -202,6 +243,7 @@ export class Stream {
         let hasCalledDone = false;
 
         this.sendTo({
+
             receive(data: PipedData) {
                 if (hasCalledDone) {
                     throw new Error("got message after 'done': " + data.t);
@@ -219,7 +261,10 @@ export class Stream {
                     callback(result);
                     break;
                 case 'header':
-                    // todo - do something with header
+                    result.putHeader(data.item);
+                    break;
+                case 'schema':
+                    // TODO - use this schema in the table.
                     break;
                 default:
                     throw new Error("unhandled case in Stream.callback: " + (data as any).t);
@@ -241,6 +286,17 @@ export class Stream {
             out.throwErrors();
 
         return out;
+    }
+
+
+    // Helper functions
+    strs() {
+        return this.sync().strs();
+    }
+
+    async one() {
+        const table = await this.toTable();
+        return table.one();
     }
 
     // Consume this stream as a sync iterator.
@@ -305,8 +361,38 @@ export class Stream {
         return items;
     }
 
+    takeItemsAndErrors() {
+        if (!this.receivedDone)
+            throw new Error("can't take(), stream is not yet closed");
+
+        if (this.downstream)
+            throw new Error("can't take(), stream has a downstream");
+
+        const items = [];
+        const errors = [];
+
+        for (const data of this._backlog) {
+            switch (data.t) {
+                case 'item':
+                    items.push(data.item);
+                    break;
+                case 'error':
+                    errors.push(data.item);
+                    break;
+            }
+        }
+
+        this._backlog = [];
+
+        return [ items, errors ];
+    }
+
     putHeader(item: Item) {
         this.receive({ t: 'header', item });
+    }
+
+    putSchema(item: SchemaItem) {
+        this.receive({ t: 'schema', item });
     }
 
     put(item: Item) {
@@ -315,6 +401,11 @@ export class Stream {
 
     putError(item: ErrorItem) {
         this.receive({ t: 'error', item });
+    }
+
+    errorAndClose(item: ErrorItem) {
+        this.receive({ t: 'error', item });
+        this.done();
     }
 
     putTableItems(table: Table) {
@@ -362,13 +453,13 @@ export class Stream {
     }
     
     static newEmptyStream() {
-        const stream = new Stream();
+        const stream = new Stream('newEmptyStream');
         stream.done();
         return stream;
     }
 
     static fromList(items: Item[]) {
-        const stream = new Stream();
+        const stream = new Stream('fromList');
         for (const item of items)
             stream.put(item);
         stream.done();
@@ -376,7 +467,7 @@ export class Stream {
     }
 
     static newStreamToReceiver(receiver: PipeReceiver) {
-        const stream = new Stream();
+        const stream = new Stream('newStreamToReceiver');
         stream.sendTo(receiver);
         return stream;
     }

@@ -1,17 +1,9 @@
 
-import { Graph } from '../Graph'
+
 import { Stream, joinStreams } from '../Stream'
 import { Step } from '../Step'
-import { prepareTableSearch } from '../FindMatch'
-import { runTableSearch } from '../RunningQuery'
-import { shallowCopy } from '../Item'
-import { QueryTuple, QueryTag, tagsToItem, withVerb } from '../Query'
+import { withVerb } from '../Query'
 import { c_done } from '../Enums'
-import { Block } from '../Block'
-
-function prepare(graph: Graph, tuple: QueryTuple, later: Block) {
-    prepareTableSearch(later, graph, tuple, later.namedInput('step_input'), later.namedInput('step_output'));
-}
 
 function run(step: Step) {
     const receivers = joinStreams(2, step.output);
@@ -28,7 +20,7 @@ function run(step: Step) {
 
             if (msg.t === c_done && !hasLaunchedSearch) {
                 hasLaunchedSearch = true;
-                runTableSearch(step.graph, step.context, searchTuple, searchInput, searchOutput);
+                step.runTableSearch(searchTuple, searchInput, searchOutput);
             }
         }
     });

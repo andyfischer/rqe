@@ -1,7 +1,7 @@
 
 import { Table } from './Table/index'
 import { TableSchema } from './Schema'
-import { QueryTuple, queryTupleToString } from './Query'
+import { QueryStep, queryStepToString } from './Query'
 
 export type ErrorType = 'verb_not_found' | 'unhandled_error' | 'provider_not_found' | 'missing_parameter'
     | 'no_table_found' | 'Unimplemented' | 'TableNotFound'
@@ -13,7 +13,7 @@ export interface ErrorItem {
     message?: string
     step?: number
     verb?: string
-    query?: QueryTuple
+    query?: QueryStep
     phase?: 'prepare' | 'execute'
 }
 
@@ -61,7 +61,7 @@ export function errorItemToString(item: ErrorItem) {
         out += `: ${item.message}`;
 
     if (item.query)
-        out += ` (${queryTupleToString(item.query)})`;
+        out += ` (${queryStepToString(item.query)})`;
 
     if (otherDetailsString !== '{}')
         out += ` ${otherDetailsString}`

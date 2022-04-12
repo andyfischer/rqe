@@ -1,17 +1,15 @@
 
-import { TokenIterator, Token, TokenDef, t_plain_value, t_quoted_string, t_star,
-    t_space, t_hash, t_newline, t_bar, t_slash,
-    t_dot, t_question, t_integer, t_dash, t_dollar, t_lbracket, t_rbracket,
-    t_lparen, t_rparen, t_equals, t_right_arrow, t_ident, lexStringToIterator } from './lexer'
+import { TokenIterator, t_plain_value, t_newline, t_bar, t_slash,
+    t_integer, t_rparen, t_right_arrow, lexStringToIterator } from './lexer'
 import { parseQueryTagFromTokens } from './parseQueryTag'
-import ParseError from './ParseError'
-import { QueryTuple, QueryTag } from '../Query'
+import { ParseError } from './ParseError'
+import { QueryStep, QueryAttrs, QueryTagEntry } from '../Query'
 
 interface Context {
     expectVerb?: boolean
 }
 
-function maybeParseVerbWithCount(it: TokenIterator): QueryTuple {
+function maybeParseVerbWithCount(it: TokenIterator): QueryStep {
     let startPos = it.position;
 
     if (it.nextText() !== "limit" && it.nextText() !== "last")
@@ -30,21 +28,25 @@ function maybeParseVerbWithCount(it: TokenIterator): QueryTuple {
     it.consume(t_integer);
 
     // Success
-    const tags: QueryTag[] = [
-        {t: 'tag', attr: 'count', value: { t: 'str_value', str: count }},
-    ];
+    const attrs: QueryAttrs = {
+        count: {
+            t: 'tag',
+            value: { t: 'str_value', str: count },
+        },
+    }
 
-    for (const tag of parseTags(it))
-        tags.push(tag);
+    for (const entry of parseTags(it)) {
+        attrs[entry.attr] = entry.tag;
+    }
 
     return {
-        t: 'tuple',
+        t: 'step',
         verb,
-        tags,
+        attrs,
     }
 }
 
-function maybeParseWaitVerb(it: TokenIterator): QueryTuple {
+function maybeParseWaitVerb(it: TokenIterator): QueryStep {
     let startPos = it.position;
 
     if (it.nextText() !== "wait")
@@ -62,21 +64,25 @@ function maybeParseWaitVerb(it: TokenIterator): QueryTuple {
     const duration = it.nextText();
     it.consume(t_integer);
 
-    const tags: QueryTag[] = [
-        {t: 'tag', attr: 'duration', value: { t: 'str_value', str: duration }},
-    ];
+    const attrs: QueryAttrs = {
+        duration: {
+            t: 'tag',
+            value: { t: 'str_value', str: duration },
+        },
+    }
 
-    for (const tag of parseTags(it))
-        tags.push(tag);
+    for (const entry of parseTags(it)) {
+        attrs[entry.attr] = entry.tag;
+    }
 
     return {
-        t: 'tuple',
+        t: 'step',
         verb,
-        tags,
+        attrs,
     }
 }
 
-function maybeParseRename(it: TokenIterator): QueryTuple {
+function maybeParseRename(it: TokenIterator): QueryStep {
     let startPos = it.position;
 
     if (it.nextText() !== "rename")
@@ -113,19 +119,25 @@ function maybeParseRename(it: TokenIterator): QueryTuple {
     to = it.consumeAsText();
 
     // Success
+    const attrs: QueryAttrs = {
+        from: {
+            t: 'tag',
+            value: { t: 'str_value', str: from },
+        },
+        to: {
+            t: 'tag',
+            value: { t: 'str_value', str: to },
+        }
+    }
 
-    const tags: QueryTag[] = [
-        {t: 'tag', attr: 'from', value: { t: 'str_value', str: from }},
-        {t: 'tag', attr: 'to', value: { t: 'str_value', str: to }},
-    ];
-
-    for (const tag of parseTags(it))
-        tags.push(tag);
+    for (const entry of parseTags(it)) {
+        attrs[entry.attr] = entry.tag;
+    }
 
     return {
-        t: 'tuple',
+        t: 'step',
         verb: 'rename',
-        tags,
+        attrs,
     }
 }
 
@@ -137,10 +149,6 @@ function maybeParseWhere(it: TokenIterator) {
 
     it.consume();
     it.skipSpaces();
-
-    let tags: QueryTag[] = [];
-    for (const tag of parseTags(it))
-        tags.push(tag);
 
     const conditions = [];
 
@@ -157,28 +165,27 @@ function* parseTags(it: TokenIterator) {
     while (true) {
         it.skipSpaces();
 
-        if (it.finished() || it.nextIs(t_newline) || it.nextIs(t_bar) || it.nextIs(t_rparen))
+        if (it.finished() || it.nextIs(t_newline) || it.nextIs(t_bar) || it.nextIs(t_slash) || it.nextIs(t_rparen))
             break;
 
-        const tag = parseQueryTagFromTokens(it);
+        const tag: QueryTagEntry = parseQueryTagFromTokens(it);
 
         yield tag;
     }
 }
 
-export function parseQueryTupleFromTokens(it: TokenIterator, ctx: Context): QueryTuple | ParseError {
+export function parseQueryTupleFromTokens(it: TokenIterator, ctx: Context): QueryStep | ParseError {
 
     it.skipSpaces();
 
     // Special syntaxes
-
     for (const path of specialSyntaxPaths) {
         const parseSuccess = path(it);
         if (parseSuccess)
             return parseSuccess;
     }
     
-    let tags: QueryTag[] = [];
+    let tags: QueryTagEntry[] = [];
     
     for (const tag of parseTags(it)) {
         tags.push(tag);
@@ -192,13 +199,13 @@ export function parseQueryTupleFromTokens(it: TokenIterator, ctx: Context): Quer
         }
     }
 
-    let verbTag: QueryTag;
+    let verbEntry: QueryTagEntry;
 
     if (ctx.expectVerb) {
-        verbTag = tags[0];
+        verbEntry = tags[0];
         tags = tags.slice(1);
         
-        if (verbTag.value.t !== 'no_value') {
+        if (verbEntry.tag.value.t !== 'no_value') {
             return {
                 t: 'parseError',
                 parsing: 'queryTuple',
@@ -206,7 +213,7 @@ export function parseQueryTupleFromTokens(it: TokenIterator, ctx: Context): Quer
             }
         }
 
-        if (verbTag.identifier) {
+        if (verbEntry.tag.identifier) {
             return {
                 t: 'parseError',
                 parsing: 'queryTuple',
@@ -217,25 +224,27 @@ export function parseQueryTupleFromTokens(it: TokenIterator, ctx: Context): Quer
 
     // Validate attrs - look for duplicates and reserved words.
     const foundAttrs = new Map<string, true>();
-    for (const tag of tags) {
-        const attr = tag.attr;
+    const attrs: QueryAttrs = {};
+    for (const entry of tags) {
+        const attr = entry.attr;
 
         if (!attr)
             continue;
 
         if (foundAttrs.get(attr))
-            throw new Error("duplicate attr: " + attr);
+            throw new Error("Duplicate attr: " + attr);
 
         if (attr === 'get')
             throw new Error("Found reserved attr 'get'");
 
         foundAttrs.set(attr, true);
+        attrs[attr] = entry.tag;
     }
 
     return {
-        t: 'tuple',
-        verb: verbTag ? (verbTag.attr as string) : 'get',
-        tags,
+        t: 'step',
+        verb: verbEntry ? (verbEntry.attr as string) : 'get',
+        attrs,
     }
 }
 
@@ -249,5 +258,5 @@ export function parseQueryTupleWithErrorCheck(str: string, ctx: Context = {}) {
     if (result.t === 'parseError')
         throw new Error("Parse error: " + str);
 
-    return result as QueryTuple;
+    return result as QueryStep;
 }

@@ -48,9 +48,19 @@ export const t_gthan: TokenDef = {
     str: ">",
 }
 
+export const t_gthaneq: TokenDef = {
+    name: "gthaneq",
+    str: ">=",
+}
+
 export const t_lthan: TokenDef = {
     name: "lthan",
     str: "<",
+}
+
+export const t_lthaneq: TokenDef = {
+    name: "lthaneq",
+    str: "<=",
 }
 
 export const t_slash = {
@@ -61,6 +71,11 @@ export const t_slash = {
 export const t_dot = {
     name: "dot",
     str: "."
+}
+
+export const t_comma = {
+    name: "comma",
+    str: ","
 }
 
 export const t_semicolon = {
@@ -143,6 +158,21 @@ export const t_bar = {
     str: "|"
 }
 
+export const t_double_bar = {
+    name: "double_bar",
+    str: "||"
+}
+
+export const t_amp = {
+    name: "amp",
+    str: "&"
+}
+
+export const t_double_amp = {
+    name: "double_amp",
+    str: "&&"
+}
+
 export const t_question = {
     name: "question",
     str: "?"
@@ -192,6 +222,7 @@ export const everyToken: TokenDef[] = [
     t_lthan,
     t_slash,
     t_dot,
+    t_comma,
     t_semicolon,
     t_colon,
     t_plus,
@@ -207,6 +238,9 @@ export const everyToken: TokenDef[] = [
     t_tilde,
     t_exclaim,
     t_bar,
+    t_double_bar,
+    t_amp,
+    t_double_amp,
     t_question,
     t_ident,
     t_integer,

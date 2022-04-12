@@ -1,5 +1,5 @@
 
-import { TableSchema, findUniqueAttr } from '../Schema'
+import { findUniqueAttr } from '../Schema'
 import { Table } from '../Table'
 import { randomHex } from '../utils/randomHex'
 import { TableSchemaIssue } from '../Errors'

@@ -1,8 +1,6 @@
 
 import { Graph } from '../Graph'
-import { LiveConsoleFormatter } from './LiveConsoleFormatter'
-// import { toQuery, QueryLike } from '../coerce'
-// import QueryStep from '../QueryStep'
+import { ConsoleFormatter } from '../format/ConsoleFormatter'
 
 function trimEndline(str) {
     if (str.length > 0 && str[str.length-1] === '\n')
@@ -53,12 +51,12 @@ export interface ReplOptions {
 export default class GraphRepl {
     graph: Graph
     opts: ReplOptions
-    formatter: LiveConsoleFormatter
+    formatter: ConsoleFormatter
 
     constructor(graph: Graph, opts: ReplOptions) {
         this.graph = graph;
         this.opts = opts;
-        // this.formatter = new LiveConsoleFormatter(console.log);
+        // this.formatter = new ConsoleFormatter(console.log);
     }
 
     async eval(line: string, onDone) {
@@ -72,7 +70,7 @@ export default class GraphRepl {
 
             const output = this.graph.query(line);
 
-            const task = this.formatter.createTask();
+            const task = this.formatter.newTask();
             output.sendTo(task.incoming);
 
         } catch (e) {

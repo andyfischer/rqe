@@ -1,7 +1,7 @@
 
 import { Table } from '../Table'
 import { QueryLike, toQuery } from '../Query'
-import { TransformQuery, LooseTransformQuery, toTransformQuery, applyTransform } from '../Transform'
+import { applyTransform } from '../Transform'
 import { Graph } from '../Graph'
 import { c_item } from '../Enums'
 

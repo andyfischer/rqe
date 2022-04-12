@@ -29,3 +29,7 @@ export function shallowCopy(item: Item) {
 export function newItem(): Item {
     return {}
 }
+
+export function isItem(value: any) {
+    return !!value && typeof value === 'object';
+}

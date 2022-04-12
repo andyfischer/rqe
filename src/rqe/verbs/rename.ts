@@ -1,20 +1,12 @@
 
-import { Graph } from '../Graph'
 import { Step } from '../Step'
 import { Item, has, get } from '../Item'
-import { PrepareParams } from '../Planning'
-import { tagsToItem } from '../Query'
 
-interface Args {
-    from: string
-    to: string
-}
+function run(step: Step) {
+    const { tuple, input, output } = step;
+    const args = step.queryToItem();
 
-function prepare({graph, later, tuple}: PrepareParams) {
-
-    const args = tagsToItem(tuple.tags);
-
-    later.transform(later.input(), later.output(), (item: Item) => {
+    input.transform(output, (item: Item) => {
         if (has(item, args.from)) {
             const val = get(item, args.from);
 
@@ -31,10 +23,9 @@ function prepare({graph, later, tuple}: PrepareParams) {
             return [item];
         }
     });
-};
+}
 
 export const rename = {
-    prepare,
-    runUsingBlock: true,
+    run,
 };
 

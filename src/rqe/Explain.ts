@@ -1,19 +1,16 @@
 
-import { Step } from './Step'
-import { MountPoint } from './MountPoint'
-import { QueryTuple, tupleHas, tupleHasValue } from './Query'
 
-export function explainWhyQueryFails(tuple: QueryTuple, table: MountPoint) {
+import { MountPoint } from './MountPoint'
+import { QueryStep, tupleHas, tupleHasValue } from './Query'
+
+export function explainWhyQueryFails(tuple: QueryStep, table: MountPoint) {
     const missingRequired: string[] = [];
     const missingRequiredValue: string[] = [];
     const extraAttrs: string[] = [];
 
-    for (const tag of tuple.tags) {
-        if (!tag.attr)
-            continue;
-
-        if (!table.has(tag.attr)) {
-            extraAttrs.push(tag.attr);
+    for (const attr of Object.keys(tuple.attrs)) {
+        if (!table.has(attr)) {
+            extraAttrs.push(attr);
         }
     }
 

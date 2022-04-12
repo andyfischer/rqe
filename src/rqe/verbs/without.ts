@@ -1,13 +1,12 @@
 
 import { Step } from '../Step'
-import { Item, has, get, entries } from '../Item'
-import { tagsToItem } from '../Query'
-import { PrepareParams } from '../Planning'
+import { Item, has, entries } from '../Item'
 
-function prepare({graph, later, tuple}: PrepareParams) {
-    const args = tagsToItem(tuple.tags);
+function run(step: Step) {
+    const { tuple, input, output } = step;
+    const args = step.queryToItem();
 
-    later.transform(later.input(), later.output(), (item: Item) => {
+    input.transform(output, (item: Item) => {
         const out = {};
 
         for (const [key,value] of entries(item)) {
@@ -20,5 +19,5 @@ function prepare({graph, later, tuple}: PrepareParams) {
 }
 
 export const without = {
-    prepare,
+    run,
 }

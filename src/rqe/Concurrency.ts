@@ -1,15 +1,16 @@
 
 import { Item } from './Item'
-import { Stream, PipeReceiver } from './Stream'
+import { Stream, PipeReceiver, PipedData, PipeDone } from './Stream'
 import { c_done, c_item } from './Enums'
+import { Table } from './Table'
 
 export type StreamingTransformFunc = (item: Item) => Stream
 
-interface Options {
+export interface StreamingTransformOptions {
     maxConcurrency?: number
 }
 
-export function streamingTransform(from: Stream, receiver: PipeReceiver, callback: StreamingTransformFunc, options: Options = {}) {
+export function streamingTransform(from: Stream, receiver: PipeReceiver, callback: StreamingTransformFunc, options: StreamingTransformOptions = {}) {
 
     let incomingHasFinished = false;
     let unfinishedStreams = 0;
@@ -21,8 +22,8 @@ export function streamingTransform(from: Stream, receiver: PipeReceiver, callbac
         unfinishedStreams++;
 
         thisResult.sendTo({
-            receive(data) {
-                switch (data.t) {
+            receive(msg) {
+                switch (msg.t) {
                 case c_done:
                     // console.log('mapStreamForEachItem saw stream end');
                     unfinishedStreams--;
@@ -33,8 +34,10 @@ export function streamingTransform(from: Stream, receiver: PipeReceiver, callbac
                     }
                     break;
                 case c_item:
-                    receiver.receive({t:'item', item: data.item});
+                    receiver.receive({t:'item', item: msg.item});
                     break;
+                default:
+                    receiver.receive(msg);
                 }
             }
         });
@@ -87,5 +90,75 @@ export function streamingTransform(from: Stream, receiver: PipeReceiver, callbac
     });
 }
 
-export function aggregateMultiple(streams: Stream[], handler: (results: Item[][]) => Item[]) {
+export function aggregateMultiple(streams: Stream[], output: Stream, onReadyHandler: (results: Table[], output: Stream) => void) {
+
+    const progress: { result: Table }[] = [];
+    let hasCalledDone = false;
+
+    function maybeDone() {
+        if (hasCalledDone)
+            return;
+
+        for (const entry of progress)
+            if (entry.result === null)
+                return;
+
+        // done
+        hasCalledDone = true;
+        const results: Table[] = [];
+        for (const entry of progress)
+            results.push(entry.result);
+
+        onReadyHandler(results, output);
+    }
+
+    for (let i = 0; i < streams.length; i++) {
+        const stream = streams[i];
+        const statusEntry = { result: null };
+        progress.push(statusEntry);
+
+        stream.callback(result => {
+            statusEntry.result = result;
+            maybeDone();
+        })
+    }
+}
+
+interface AggregateData {
+    t: 'aggregateData'
+    streamIndex: number
+    msg: PipedData
+}
+
+type AggregateEvent = AggregateData | PipeDone;
+
+export function streamingAggregate(streams: Stream[], receiver: (event: AggregateEvent) => void) {
+
+    let waitingForDone = streams.length;
+
+    for (let i = 0; i < streams.length; i++) {
+        streams[i].sendTo({
+            receive(msg) {
+                try {
+                    receiver({
+                        t: 'aggregateData',
+                        streamIndex: i,
+                        msg
+                    });
+                } catch (err) {
+                    console.error(err);
+                }
+
+                if (msg.t === 'done') {
+                    waitingForDone--;
+
+                    if (waitingForDone === 0) {
+                        receiver({
+                            t: 'done'
+                        });
+                    }
+                }
+            }
+        });
+    }
 }

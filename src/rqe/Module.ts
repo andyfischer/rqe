@@ -1,31 +1,53 @@
 
-import { Setup } from './Setup'
-import { MountPoint, MountSpec } from './MountPoint'
+import { MountPoint, MountPointSpec } from './MountPoint'
 import { Graph } from './Graph'
 import { IDSourceNumber as IDSource } from './utils/IDSource'
 import { ItemChangeListener } from './reactive/ItemChangeEvent'
+import { CollectedMountLink, addMountThatHasSpecificValue } from './CollectedMounts'
+
+function hasSpecificValue(point: MountPointSpec) {
+    for (const attr of Object.values(point.attrs))
+        if (attr.specificValue)
+            return true;
+    return false;
+}
 
 export class Module {
     graph: Graph
     moduleId: string
     points: MountPoint[] = []
     pointIds = new IDSource()
-    pointsById: Map<number, MountPoint>
 
-    constructor(graph: Graph, setup?: Setup) {
+    // Derived:
+    pointsById: Map<number, MountPoint>
+    // collectedMountLinks: CollectedMountLink[]
+
+    constructor(graph: Graph) {
         this.graph = graph;
         this.moduleId = graph.nextModuleId.take();
-        if (setup)
-            this.redefine(setup.toMountSpec());
     }
 
-    redefine(spec: MountSpec) {
+    redefine(newSpecs: MountPointSpec[]) {
 
         const oldPoints = this.points;
         const newPoints = [];
-        this.pointsById = new Map()
 
-        for (const pointSpec of spec.points) {
+        // Delete old derived state
+        this.pointsById = new Map()
+        /*
+        for (const link of this.collectedMountLinks || []) {
+            this.graph.collectedMounts().removeMount(link);
+        }
+        */
+
+        for (const pointSpec of newSpecs) {
+            /*
+            if (hasSpecificValue(pointSpec)) {
+                addMountThatHasSpecificValue(this.graph, pointSpec);
+                continue;
+            }
+            */
+
             pointSpec.localId = pointSpec.localId || this.pointIds.take();
             if (this.pointsById.has(pointSpec.localId))
                 throw new Error("module already has a point with id: " + pointSpec.localId);
@@ -43,7 +65,7 @@ export class Module {
     }
 
     clear() {
-        this.redefine({ points: [] });
+        this.redefine([]);
     }
 
     sendUpdate(listener: ItemChangeListener) {

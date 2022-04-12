@@ -24,8 +24,8 @@ export function getCompletions(graph: Graph, line: string): string[] {
             found.set(verb, true);
     }
 
-    for (const table of graph.everyTable()) {
-        for (const attr of table.attrs.keys()) {
+    for (const table of graph.everyMountPoint()) {
+        for (const attr of Object.keys(table.attrs)) {
             if (attr.startsWith(lastWord))
                 found.set(attr, true);
         }

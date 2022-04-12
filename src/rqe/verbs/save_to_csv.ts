@@ -4,6 +4,11 @@ import * as fs from 'fs'
 import { formatAsCsv } from '../format/csv'
 
 function run(step: Step) {
+    if (step.schemaOnly) {
+        step.output.done();
+        return;
+    }
+
     const { filename } = step.queryToItem();
     if (!filename)
         throw new Error('save_to_csv requires: filename');

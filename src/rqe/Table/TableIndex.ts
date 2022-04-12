@@ -2,6 +2,7 @@
 import { AttrSet, AttrMap, LooseAttrList } from '.'
 import { header, itemGlobalId } from './ObjectHeader'
 import { Table } from '.'
+import { get, has, Item } from '../Item'
 
 function valueToKeyString(value: any) {
     if (value == null || value == undefined) {
@@ -51,6 +52,17 @@ export default class TableIndex<ValueType> {
         return key.join(',');
     }
 
+    toKeyUsingItem(item: ValueType) {
+        let key = [];
+
+        for (const attr of this.attrs) {
+            const value = get(item, attr);
+            key.push(valueToKeyString(value));
+        }
+
+        return key.join(',');
+    }
+
     *get(attrs: AttrMap) {
         const key = this.toKey(attrs);
         const bucket = this.data.get(key);
@@ -66,32 +78,33 @@ export default class TableIndex<ValueType> {
         return null;
     }
 
-    insert(tableInternalKey: number, attrs: AttrMap, value: ValueType) {
-        const key = this.toKey(attrs);
+    insert(item: ValueType) {
+        const key = this.toKeyUsingItem(item);
         let bucket = this.data.get(key);
         if (!bucket) {
             bucket = new Map();
             this.data.set(key, bucket);
         }
 
-        bucket.set(tableInternalKey, value);
+        const itemHeader = header(item);
+        bucket.set(itemHeader.tableInternalKey, item);
     }
 
-    remove(tableInternalKey: number, attrs: AttrMap, value: any) {
-        const key = this.toKey(attrs);
+    remove(item: ValueType) {
+        const key = this.toKeyUsingItem(item);
         let bucket = this.data.get(key);
         if (!bucket)
             return;
 
-        bucket.delete(tableInternalKey);
+        bucket.delete(header(item).tableInternalKey);
         
         if (bucket.size === 0)
             this.data.delete(key);
     }
 
-    coversAttrs(attrs: Map<string,true>) {
+    coversItem(item: Item) {
         for (const requiredAttr of this.attrs) {
-            if (!attrs.has(requiredAttr))
+            if (!has(item, requiredAttr))
                 return false;
         }
         return true;
@@ -110,5 +123,11 @@ export default class TableIndex<ValueType> {
 
     coversSingleAttribute(attr: string) {
         return (this.attrs.length === 1 && this.attrs[0] === attr)
+    }
+
+    rebuild() {
+        this.data = new Map();
+        for (const item of this.table.scan())
+            this.insert(item);
     }
 }

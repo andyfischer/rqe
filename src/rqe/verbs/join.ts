@@ -1,41 +1,39 @@
 
-import { Graph } from '../Graph'
-import { QueryTuple, QueryTag, tagsToItem } from '../Query'
+import { QueryStep } from '../Query'
 import { Step } from '../Step'
-import { Stream, PipeReceiver } from '../Stream'
-import { runTableSearch } from '../RunningQuery'
-import { StringValue } from '../TaggedValue'
-import { prepareTableSearch, findBestPointMatch } from '../FindMatch'
-import { Block } from '../Block'
+import { Stream } from '../Stream'
+import { findBestPointMatch, PointMatch } from '../FindMatch'
 import { c_done, c_item } from '../Enums'
-import { Item, has } from '../Item'
+import { has } from '../Item'
 import { withVerb } from '../Query'
-import { PrepareParams } from '../Planning'
-import { queryTupleToString } from '../Query'
+import { mapValues } from '../utils/mapObject'
+import { toTagged } from '../TaggedValue'
+import { streamingAggregate } from '../Concurrency'
+import { Item } from '../Item'
+import { formatValue } from '../format/formatItem'
+import { MultiMap } from '../utils/MultiMap'
 
-function prepare({graph, later, tuple, incomingSchema}: PrepareParams) {
+function run(step: Step) {
 
+    const { graph, tuple, incomingSchema } = step;
     const context = {};
+    const hasLhsSchema = !!incomingSchema[0];
 
-    // First see if we can query RHS in side-by-side mode (ie, not using any inputs).
+    // First see if we can query RHS in side-by-side mode.
     const sideBySideMatch = findBestPointMatch(graph, withVerb(tuple, 'get'));
 
-    if (sideBySideMatch) {
-        // TODO
-        /*
-        const rhsResults = later.new_stream();
-        prepareTableSearch(later, graph, withVerb(tuple, 'get'), later.new_empty_stream(), rhsResults);
-        */
+    if (hasLhsSchema && sideBySideMatch) {
+        // return runSideBySideMatch(step, sideBySideMatch);
     }
 
-    // Side-by-side didn't work. Find a fanout match (using incoming inputs)
-    const fanoutTags: QueryTag[] = tuple.tags.map(tag => {
+    // Side-by-side didn't work. Find a fanout match.
+    const fanoutTags = mapValues(tuple.attrs, (details, attr) => {
         // Some "no value" tags will actually have a value, once we start doing the join.
-        if (tag.value.t === 'no_value') {
+        if (details.value.t === 'no_value') {
             for (const item of incomingSchema) {
-                if (has(incomingSchema, tag.attr)) {
+                if (has(item, attr)) {
                     return {
-                        ...tag,
+                        ...details,
                         value: {
                             t: 'abstract'
                         }
@@ -43,24 +41,103 @@ function prepare({graph, later, tuple, incomingSchema}: PrepareParams) {
                 }
             }
         }
-
-        return tag;
+        return details;
     });
 
-    const fanoutTuple: QueryTuple = { t: 'tuple', verb: 'get', tags: fanoutTags };
+    const fanoutTuple: QueryStep = { t: 'step', verb: 'get', attrs: fanoutTags };
     const fanoutMatch = findBestPointMatch(graph, fanoutTuple);
 
     if (!fanoutMatch) {
-        later.errorAndClose({
+        step.output.errorAndClose({
             errorType: 'no_table_found',
             query: fanoutTuple,
         });
         return;
     }
 
-    later.streaming_transform(later.input(), later.output(), lhsItem => {
+    runFanoutMatch(step, fanoutMatch);
+}
 
-        // console.log('lhsItem: ', lhsItem);
+function runSideBySideMatch(step: Step, match: PointMatch) {
+    const rhsSearch: QueryStep = {t: 'step', verb: 'get', attrs: step.tuple.attrs };
+    const rhsOutput = new Stream();
+    step.runTableSearch(rhsSearch, Stream.newEmptyStream(), rhsOutput);
+
+    const lhsSchema = step.incomingSchema;
+
+    const commonAttrs = [];
+
+    for (const attr of Object.keys(lhsSchema[0])) {
+        if (match.match.attrs.has(attr)) {
+            commonAttrs.push(attr);
+        }
+    }
+
+    if (commonAttrs.length === 0) {
+        throw new Error("Can't side-by-side match, no common attrs");
+    }
+
+    function getItemKey(item: Item) {
+        const strs = [];
+        for (const attr of commonAttrs) {
+            strs.push(formatValue(item[attr]));
+        }
+        return strs.join(',');
+    }
+
+    const found = [new MultiMap(), new MultiMap()];
+
+    const overallOutput = step.output;
+
+    streamingAggregate([step.input, rhsOutput], event => {
+        if (event.t === 'done') {
+            overallOutput.done();
+            return;
+        }
+
+        if (event.msg.t === 'item') {
+            const otherStream = event.streamIndex === 0 ? 1 : 0;
+
+            const item = event.msg.item;
+            const key = getItemKey(item);
+
+            // Check for match
+            for (const match of found[otherStream].get(key)) {
+                const fixedItem = {
+                    ...item
+                }
+
+                // Include any missing attributes from the other side.
+                for (const [ key, value ] of Object.entries(match)) {
+                    if (fixedItem[key] === undefined)
+                        fixedItem[key] = value;
+                }
+
+                overallOutput.put(fixedItem);
+
+            }
+
+            found[event.streamIndex].add(key, item);
+            return;
+        }
+
+        if (event.msg.t === 'done')
+            return;
+
+        overallOutput.receive(event.msg);
+    });
+
+    /*
+    const rhsResults = later.new_stream();
+    prepareTableSearch(later, graph, withVerb(tuple, 'get'), later.new_empty_stream(), rhsResults);
+    */
+}
+
+function runFanoutMatch(step: Step, fanoutMatch: PointMatch) {
+
+    const { input, output, tuple } = step;
+
+    input.streamingTransform(step.output, lhsItem => {
 
         const thisOutput = new Stream();
         const fixedOutput = new Stream();
@@ -92,35 +169,24 @@ function prepare({graph, later, tuple, incomingSchema}: PrepareParams) {
             }
         });
 
-        const tags = tuple.tags.map(tag => {
-            if (tag.value.t === 'no_value' && lhsItem[tag.attr] !== undefined) {
+        const searchAttrs = mapValues(tuple.attrs, (details, attr) => {
+            if (details.value.t === 'no_value' && lhsItem[attr] !== undefined) {
                 return {
-                    ...tag,
-                    value: {
-                        t: 'str_value',
-                        str: lhsItem[tag.attr] as string,
-                    } as StringValue
+                    ...details,
+                    value: toTagged(lhsItem[attr]),
                 }
             } else {
-                return tag;
+                return details;
             }
         });
 
-        // console.log('join running subquery: ', updatedParams);
-
-        runTableSearch(graph, context, {t: 'tuple', verb: 'get', tags },
-                       Stream.newEmptyStream(), thisOutput);
+        const relatedSearch: QueryStep = {t: 'step', verb: 'get', attrs: searchAttrs };
+        step.runTableSearch(relatedSearch, Stream.newEmptyStream(), thisOutput);
 
         return fixedOutput;
     }, { maxConcurrency: 300 });
-
-    // console.log('incomingSchema: ', incomingSchema);
-
-    // prepareTableSearch(later, step.graph, step, step.tuple, later.namedInput('step_input'), later.namedInput('step_output'));
-    // console.log('join has prepared', later.str())
 }
 
-
 export const join = {
-    prepare,
+    run,
 }

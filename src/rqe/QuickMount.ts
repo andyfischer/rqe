@@ -1,7 +1,6 @@
 
-import { Setup } from './Setup'
 import { Graph } from './Graph'
-import { MountPoint } from './MountPoint'
+import { MountPoint, MountPointSpec } from './MountPoint'
 import { Step } from './Step'
 
 interface FunctionDecl {
@@ -26,7 +25,7 @@ function getDecl(func: Function): FunctionDecl {
     }
 }
 
-export function quickMountJavascriptFunction(setup: Setup, func: Function) {
+export function quickMountJavascriptFunction(func: Function): MountPointSpec {
 
     const decl = getDecl(func)
     const name = decl.name || `anon`;
@@ -56,11 +55,11 @@ export function quickMountJavascriptFunction(setup: Setup, func: Function) {
         }
     }
 
-    setup.bind({
+    return {
         name: `quick_mount_${name}`,
         attrs,
         run,
-    });
+    };
 }
 
 export function javascriptQuickMountIntoGraph(graph: Graph, func: Function): MountPoint {
@@ -68,7 +67,7 @@ export function javascriptQuickMountIntoGraph(graph: Graph, func: Function): Mou
     if (existing)
         return existing;
 
-    const module = graph.createModule(setup => quickMountJavascriptFunction(setup, func));
+    const module = graph.createModuleV2([quickMountJavascriptFunction(func)]);
 
     if (module.points.length !== 1)
         throw new Error('javascriptQuickMountIntoGraph internal error: got more than one table');
@@ -79,18 +78,18 @@ export function javascriptQuickMountIntoGraph(graph: Graph, func: Function): Mou
 }
 
 export function setObjectMetadata(obj: any, field: string, value: any) {
-    obj['.arqe'] = obj['.arqe'] || new Map();
+    obj['.rqe'] = obj['.rqe'] || new Map();
 
-    const arqeData: Map<string,any> = obj['.arqe'];
+    const arqeData: Map<string,any> = obj['.rqe'];
 
     arqeData.set(field, value);
 }
 
 export function getObjectMetadata(obj: any, field: string) {
-    if (!obj['.arqe'])
+    if (!obj['.rqe'])
         return null;
 
-    const arqeData: Map<string,any> = obj['.arqe'];
+    const arqeData: Map<string,any> = obj['.rqe'];
 
     return arqeData.get(field);
 }

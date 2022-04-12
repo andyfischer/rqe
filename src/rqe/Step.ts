@@ -1,20 +1,22 @@
 
-import { Graph } from './Graph'
-import { QueryTag, QueryLike, tagsToItem } from './Query'
+import { Graph, QueryParameters } from './Graph'
+import { QueryLike, attrsToItem } from './Query'
 import { Stream } from './Stream'
 import { StoredQuery } from './StoredQuery'
 import { PlannedQuery, PlannedStep } from './Planning'
 import { Item } from './Item'
 import { ErrorItem } from './Errors'
-import { QueryTuple } from './Query'
+import { QueryStep } from './Query'
 import { RunningQuery } from './RunningQuery'
 import { unwrapTagged } from './TaggedValue'
 import { QueryExecutionContext } from './Graph'
+import { callPoint } from './CallPoint'
+import { MountPointRef, runTableSearch } from './FindMatch'
 
 interface ConstructorArgs {
     id?: number
     graph: Graph
-    tuple: QueryTuple
+    tuple: QueryStep
     input: Stream
     output: Stream
     context: QueryExecutionContext
@@ -27,10 +29,9 @@ export class Step {
 
     // id (unique within the PreparedQuery)
     id: number
-    tuple: QueryTuple
+    tuple: QueryStep
 
     graph: Graph
-    tags: QueryTag[]
     verb: string
     input: Stream
     output: Stream
@@ -39,6 +40,11 @@ export class Step {
     planned: PlannedQuery
     plannedStep: PlannedStep
     running: RunningQuery
+
+    incomingSchema: Item[]
+
+    schemaOnly: boolean
+    sawUsedMounts: MountPointRef[]
 
     declaredAsync: boolean
     declaredStreaming: boolean
@@ -50,7 +56,6 @@ export class Step {
         this.id = args.id;
         this.graph = args.graph;
         this.tuple = args.tuple;
-        this.tags = args.tuple.tags;
         this.verb = args.tuple.verb;
         this.input = args.input;
         this.output = args.output;
@@ -61,112 +66,33 @@ export class Step {
     }
 
     has(attr: string) {
-        for (const tag of this.tags) 
-            if (tag.attr === attr)
-                return true;
-        return false;
+        return this.tuple.attrs[attr] !== undefined;
     }
 
     hasValue(attr: string) {
-        for (const tag of this.tags) 
-            if (tag.attr === attr)
-                return tag.value.t !== 'no_value';
-        return false;
+        return (this.tuple.attrs[attr] !== undefined
+                && this.tuple.attrs[attr].value.t !== 'no_value');
     }
     
-    hasStar() {
-        for (const tag of this.tags) 
-            if (tag.specialAttr && tag.specialAttr.t === 'star')
-                return true;
-        return false;
-    }
-
-    withInput(input: Stream): Step {
-        const params = new Step(this);
-        params.input = input;
-        return params;
-    }
-
     withOutput(output: Stream): Step {
         const params = new Step(this);
         params.output = output;
         return params;
     }
 
-    dropAttr(attr: string): Step {
-        const tuple: QueryTuple = {
-            t: 'tuple',
-            verb: this.tuple.verb,
-            tags: this.tuple.tags.filter(tag => tag.attr !== attr)
-        };
-
-        return new Step({
-            graph: this.graph,
-            input: this.input,
-            output: this.output,
-            planned: this.planned,
-            plannedStep: this.plannedStep,
-            running: this.running,
-            context: this.context,
-            tuple,
-        });
-    }
-
-    dropStar(): Step {
-        const tuple: QueryTuple = {
-            t: 'tuple',
-            verb: this.tuple.verb,
-            tags: this.tuple.tags.filter(tag => !(tag.specialAttr && tag.specialAttr.t === 'star')),
-        };
-
-        return new Step({
-            graph: this.graph,
-            input: this.input,
-            output: this.output,
-            planned: this.planned,
-            plannedStep: this.plannedStep,
-            running: this.running,
-            context: this.context,
-            tuple,
-        });
-    }
-
-    addAttrs(attrs: string[]) {
-        const tags = this.tags.slice();
-
-        for (const attr of attrs)
-            tags.push({ t: 'tag', attr, value: { t: 'no_value' }});
-
-        const tuple: QueryTuple = {
-            t: 'tuple',
-            verb: this.tuple.verb,
-            tags,
-        };
-
-        return new Step({
-            graph: this.graph,
-            input: this.input,
-            output: this.output,
-            planned: this.planned,
-            plannedStep: this.plannedStep,
-            running: this.running,
-            context: this.context,
-            tuple,
-        });
-    }
-
-    query(queryLike: QueryLike, input?: Stream) {
-        return this.graph.query(queryLike, input);
+    query(queryLike: QueryLike, parameters: QueryParameters = {}) {
+        return this.graph.query(queryLike, parameters);
     }
 
     queryToItem() {
-        return tagsToItem(this.tags);
+        return attrsToItem(this.tuple.attrs);
     }
 
     queryAsValue() {
-        return tagsToItem(this.tags);
+        return attrsToItem(this.tuple.attrs);
     }
 
+    /*
     queryValuesToItem() {
         const item: Item = {};
         for (const tag of this.tuple.tags) {
@@ -174,8 +100,8 @@ export class Step {
                 case 'str_value':
                     item[tag.attr] = tag.value.str;
                     break;
-                case 'query_value':
-                    item[tag.attr] = tag.value.query;
+                case 'query':
+                    item[tag.attr] = tag.value;
                     break;
                 case 'item':
                     item[tag.attr] = tag.value.item;
@@ -185,6 +111,7 @@ export class Step {
 
         return item;
     }
+    */
 
     get(attr: string): string | null {
         const tval = this.getTaggedValue(attr);
@@ -199,11 +126,8 @@ export class Step {
     }
 
     getTaggedValue(attr: string) {
-        for (const tag of this.tags)
-            if (tag.attr === attr)
-                return tag.value;
-
-        return null;
+        const tag = this.tuple.attrs[attr];
+        return tag && tag.value;
     }
 
     getString(attr: string) {
@@ -217,29 +141,12 @@ export class Step {
         throw new Error("Not a string value for: " + attr);
     }
 
-    getPositionalAttr(index: number) {
-        return this.tags[index].attr;
-    }
-
     getOptional(attr: string, defaultValue: any) {
-        for (const tag of this.tags) {
-            if (tag.attr === attr) {
-                if (tag.value) {
-                    switch (tag.value.t) {
-                    case 'str_value':
-                        return tag.value.str;
-                    case 'no_value':
-                        return defaultValue;
-                    case 'query_value':
-                        return tag.value.query;
-                    default:
-                        throw new Error('unhandled case');
-                    }
-                }
-            }
-        }
+        const tag = this.tuple.attrs[attr];
+        if (!tag || tag.value.t === 'no_value')
+            return defaultValue;
 
-        return defaultValue;
+        return unwrapTagged(tag.value);
     }
 
     getInt(attr: string) {
@@ -288,5 +195,20 @@ export class Step {
 
     streaming() {
         this.declaredStreaming = true;
+    }
+
+    runTableSearch(tuple: QueryStep, input: Stream, output: Stream) {
+        runTableSearch(this, tuple, input, output);
+    }
+
+    callMountPoint(pointRef: MountPointRef, tuple: QueryStep, input: Stream, output: Stream) {
+        if (this.schemaOnly) {
+            this.sawUsedMounts = this.sawUsedMounts || [];
+            this.sawUsedMounts.push(pointRef);
+            output.put(attrsToItem(tuple.attrs));
+            output.done();
+        } else {
+            callPoint(this.graph, this.context, pointRef, tuple, input, output);
+        }
     }
 }

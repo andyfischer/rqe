@@ -1,9 +1,7 @@
 
 import { Graph } from './Graph'
-import { Table } from './Table'
 import { Query } from './Query'
 import { Stream } from './Stream'
-import { Step } from './Step'
 
 export interface Provider {
     provider_id?: string

@@ -5,10 +5,10 @@ import { StoredQuery } from './StoredQuery'
 import { TableImplementationError } from './Errors'
 import { Item } from './Item'
 import { parseTableDecl } from './parser/parseTableDecl'
-import { MountSpec, MountPointSpec, MountAttr } from './MountPoint'
+import { MountPointSpec, MountAttr } from './MountPoint'
+import { Stream } from './Stream'
 
-export type ItemCallback = (item: Item, ctx?: Step) => null | void | Item | Item[] | Promise<Item | Item[]>
-export type SetupCallback = (setup: Setup) => void
+export type ItemCallback = (item: Item, ctx?: Step) => null | void | Item | Item[] | Promise<Item | Item[]> | Stream
 export type HandlerCallback = (ctx: Step) => void | Promise<any>
 
 export interface LooseBindParams {
@@ -17,7 +17,7 @@ export interface LooseBindParams {
     run?: HandlerCallback
 }
 
-function toMountSpec(looseSpec: LooseBindParams) {
+export function toMountSpec(looseSpec: LooseBindParams): MountPointSpec {
     const attrs: { [attr: string]: MountAttr } = {};
 
     const result: MountPointSpec = {
@@ -44,7 +44,6 @@ export class Setup {
     _tableName: string
     aliasQuery: QueryLike
     runCallback: HandlerCallback
-    isV2Callback: boolean
     parent: Setup
     children: Setup[] = []
 
@@ -164,15 +163,13 @@ export class Setup {
         }
     }
 
-    toMountSpec(): MountSpec {
-        const result: MountSpec = {
-            points: []
-        };
+    toSpecs() {
+        const result: MountPointSpec[] = []
 
         for (const child of this.iterateChildren()) {
             if (child.runCallback) {
 
-                result.points.push({
+                result.push({
                     attrs: child.getAttrsWithInherited(),
                     name: child._tableName,
                     run: child.runCallback
@@ -185,7 +182,7 @@ export class Setup {
     
     prepareQuery(queryLike: QueryLike) {
         const query = toQuery(queryLike);
-        if (query.t !== 'pipedQuery')
+        if (query.t !== 'query')
             throw new Error('expected pipedQuery');
         return new StoredQuery(query);
     }
@@ -201,7 +198,7 @@ function toList(s: string | string[]) {
     return [s];
 }
 
-export function toTableBind(decl: string, callback: HandlerCallback): LooseBindParams {
+export function toTableBind(decl: string, callback: HandlerCallback): MountPointSpec {
     const params = parseTableDecl(decl);
     if (params.t === 'parseError')
         throw new Error("Failed to parse: " + decl + ' ' + params);
@@ -210,38 +207,11 @@ export function toTableBind(decl: string, callback: HandlerCallback): LooseBindP
 }
 
 export function itemCallbackToHandler(callback: ItemCallback): HandlerCallback {
-    return (ctx: Step) => {
-        const input = ctx.queryToItem();
+    return (step: Step) => {
+        const input = step.queryToItem();
 
-        const data: any = callback(input, ctx);
+        const data: any = callback(input, step);
 
-        if (data && data.then) {
-            ctx.async();
-
-            return data.then(data => {
-                if (!data)
-                    return;
-
-                if (Array.isArray(data)) {
-                    for (const el of data)
-                        ctx.put(el);
-                    return;
-                }
-
-                ctx.put(data);
-            });
-        } else {
-            if (!data)
-                return;
-
-            if (Array.isArray(data)) {
-                for (const el of data)
-                    ctx.put(el);
-                return;
-            }
-
-            ctx.put(data);
-        }
+        return data;
     }
 }
-

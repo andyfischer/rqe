@@ -1,17 +1,20 @@
 
-import { Step } from '../Step'
+
 import { Verb } from './_shared'
 
 import { add } from './add'
 import { count } from './count'
+import { count_by } from './count_by'
 import { get } from './get'
 import { join } from './join'
 import { just } from './just'
+import { incoming } from './incoming'
 import { limit } from './limit'
 import { last } from './last'
 import { need } from './need'
 import { one } from './one'
 import { order_by } from './order_by'
+import { put } from './put'
 import { rate } from './rate'
 import { rename } from './rename'
 import { reverse } from './reverse'
@@ -20,8 +23,10 @@ import { save_to_csv } from './save_to_csv'
 import { then } from './then'
 import { trace } from './trace'
 import { to_csv } from './to_csv'
+import { update } from './update'
 import { wait } from './wait'
 import { where } from './where'
+import { _with } from './with'
 import { without } from './without'
 import { value } from './value'
 
@@ -31,14 +36,17 @@ function init() {
     _everyVerb = {
         add,
         count,
+        count_by,
         get,
         join,
         just,
+        incoming,
         limit,
         last,
         need,
         one,
         order_by,
+        put,
         rate,
         rename,
         reverse,
@@ -47,8 +55,10 @@ function init() {
         then,
         to_csv,
         trace,
+        update,
         wait,
         where,
+        with: _with,
         without,
         value,
     }

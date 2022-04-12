@@ -1,16 +1,13 @@
 
-import { QueryTag } from './Query'
-import { Step } from './Step'
-import { Setup, HandlerCallback } from './Setup'
-import { Item } from './Item'
-import { BackpressureStop } from './Stream'
+import { HandlerCallback } from './Setup'
 import { Module } from './Module'
 import { MountPointRef } from './FindMatch'
-import { valueToString } from './Debug'
+import { TaggedValue } from './TaggedValue'
 
 export interface MountAttr {
     required?: boolean
-    withValue?: boolean
+    requiresValue?: boolean
+    specificValue?: TaggedValue
     assumeInclude?: boolean
 }
 
@@ -33,7 +30,7 @@ export class MountPoint {
     providerId?: string
 
     spec: MountPointSpec
-    attrs = new Map<string, MountAttr>();
+    attrs: { [attr: string]: MountAttr }
     requiredAttrCount: number
     module: Module
 
@@ -42,20 +39,18 @@ export class MountPoint {
     addedAttributeTables: Map<string, MountPoint> = new Map();
 
     constructor(spec: MountPointSpec, module?: Module) {
+        spec.t = 'mountPointSpec';
+
         this.spec = spec;
         this.name = spec.name;
         this.module = module;
         this.callback = spec.run;
         this.providerId = spec.providerId;
         this.localId = spec.localId;
-
-        const attrs = spec.attrs;
-        for (const [attr, attrConfig] of Object.entries(attrs)) {
-            this.attrs.set(attr, attrConfig);
-        }
+        this.attrs = spec.attrs;
 
         this.requiredAttrCount = 0;
-        for (const attrConfig of this.attrs.values())
+        for (const attrConfig of Object.values(this.attrs))
             if (attrConfig.required)
                 this.requiredAttrCount++;
     }
@@ -68,7 +63,7 @@ export class MountPoint {
     }
 
     has(attr: string) {
-        return this.attrs.has(attr);
+        return this.attrs[attr] !== undefined;
     }
 
     getAddedAttribute(attr: string) {
@@ -84,54 +79,35 @@ export class MountPoint {
     }
 }
 
-export function callMountPointWithStep(point: MountPoint, step: Step) {
-    step.graph.logging.put('execution', `call_mount_point: mount=${point.name} tuple=${valueToString(step.tuple)}`);
-
-    if (!point.callback)
-        throw new Error("MountPoint has no .callback");
-
-    try {
-        let result: any = point.callback(step);
-
-        if (result && result.then) {
-            if (!step.declaredStreaming) {
-                // Implicit async
-                step.async();
-
-                result = result.then(() => {
-                    step.output.sendDoneIfNeeded();
-                })
-            }
-            
-            // Catch exceptions (even if declaredStreaming is true)
-
-            result
-            .catch(e => {
-                if ((e as BackpressureStop).backpressure_stop) {
-                    // Function is deliberately being killed by a BackpressureStop exception. Not an error.
-                    step.output.sendDoneIfNeeded();
-                    return;
-                }
-
-                step.output.sendUnhandledError(e);
-                step.output.sendDoneIfNeeded();
-                return;
-            });
+export function mountSpecPlusAttr(spec: MountPointSpec, addedAttr: string): MountPointSpec {
+    return {
+        name: spec.name + '/' + addedAttr,
+        attrs: {
+            ...spec.attrs,
+            [addedAttr]: { required: true },
         }
-    } catch (e) {
-        if ((e as BackpressureStop).backpressure_stop) {
-            // Function is deliberately being killed by a BackpressureStop exception. Not an error.
-            step.output.sendDoneIfNeeded();
-            return;
-        }
-
-        step.output.sendUnhandledError(e);
-        step.output.sendDoneIfNeeded();
-        return;
-    }
-
-    // Automatically call 'done' if the call is not async.
-    if (!step.declaredAsync && !step.declaredStreaming) {
-        step.output.sendDoneIfNeeded();
     }
 }
+
+export function mountAttrToString(attr: string, details: MountAttr) {
+    let out = attr;
+
+    if (!details.required && !details.requiresValue)
+        out += '?';
+
+    if (details.requiresValue)
+        out += '=x'
+
+    return out;
+}
+
+export function pointSpecToString(spec: MountPointSpec) {
+    const out = [];
+
+    for (const [ attr, details ] of Object.entries(spec.attrs)) {
+        out.push(mountAttrToString(attr, details));
+    }
+
+    return out.join(' ');
+}
+

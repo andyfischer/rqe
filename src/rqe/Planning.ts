@@ -2,38 +2,35 @@
 import { Step } from './Step'
 import { Table } from './Table'
 import { Graph } from './Graph'
-import { Query, QueryTuple, queryTupleToString, toQueryTuple, QueryTupleLike,
-    queryHasAttr, withoutAttr, withoutStar, withAttrs, tupleGetStringValue,
-    tupleHas, tupleHasStar } from './Query'
+import { Query, QueryStep } from './Query'
 import { Stream } from './Stream'
-import { ErrorItem, newErrorTable } from './Errors'
+import { ErrorItem } from './Errors'
 import { IDSourceNumber as IDSource } from './utils/IDSource'
 import { Item } from './Item'
-import { MountPoint } from './MountPoint'
-import { Block, executeBlockSchemaOnly, LooseInput, runAstModification } from './Block'
-import { getQueryMountMatch, QueryMountMatch } from './FindMatch'
-import { explainWhyQueryFails } from './Explain'
 import { QueryExecutionContext } from './Graph'
 import { getVerb } from './verbs/_list'
 import { has } from './Item'
-import { findBestPointMatch, prepareTableSearch } from './FindMatch'
+import { findBestPointMatch } from './FindMatch'
 import { planToString } from './Debug'
+import { Verb } from './verbs/_shared'
+import { MountPointRef } from './FindMatch'
 
 export interface PlannedStep {
     id: number
-    tuple: QueryTuple
+    tuple: QueryStep
 
+    verbDef: Verb
     inputSchema: Item[]
     outputSchema: Item[]
-    block: Block
+    sawUsedMounts: MountPointRef[]
+    errors: ErrorItem[]
 }
 
-export interface PrepareParams {
-    graph: Graph
-    tuple: QueryTuple
-    later: Block
-    incomingSchema: Item[]
+interface LinkedQuery {
+    jsCode: string
 }
+
+type QueryHandlerFunction = (graph: Graph, context: QueryExecutionContext, input: Stream, output: Stream) => void
 
 export class PlannedQuery {
     graph: Graph
@@ -60,29 +57,16 @@ export class PlannedQuery {
         return this.steps[this.steps.length - 1].outputSchema;
     }
 
-    toLinkedBlock(): Block {
-        const linked = new Block();
-
-        for (const step of this.steps) {
-            linked.comment("start tuple: " + queryTupleToString(step.tuple));
-            linked.appendInline(step.block);
-        }
-
-        return linked;
-    }
-
     getPrepareErrors(): Table {
         const out = new Table({});
 
         for (const step of this.steps) {
-            if (step.block) {
-                for (const error of step.block.errors()) {
-                    out.put({
-                        ...error,
-                        step: step.id,
-                        phase: 'prepare',
-                    });
-                }
+            for (const error of step.errors) {
+                out.put({
+                    ...error,
+                    step: step.id,
+                    phase: 'prepare',
+                });
             }
         }
         
@@ -94,7 +78,7 @@ export class PlannedQuery {
     }
 }
 
-export function createOnePlannedStep(plannedQuery: PlannedQuery, tuple: QueryTuple, previousPrepareOutput: Item[]): PlannedStep {
+export function createOnePlannedStep(plannedQuery: PlannedQuery, tuple: QueryStep, previousPrepareOutput: Item[]): PlannedStep {
 
     const { graph } = plannedQuery;
 
@@ -102,46 +86,44 @@ export function createOnePlannedStep(plannedQuery: PlannedQuery, tuple: QueryTup
 
     // Call .prepare
     let verbDef = plannedQuery.graph ? plannedQuery.graph.getVerb(tuple.verb) : getVerb(tuple.verb);
-    const block = new Block();
 
     if (!verbDef) {
-        block.put_error(block.namedInput('step_output'), {
-            errorType: 'verb_not_found',
-            verb: tuple.verb,
-        });
+        // Assume it's a join
+        verbDef = plannedQuery.graph ? plannedQuery.graph.getVerb('join') : getVerb('join');
 
-        return {
-            id,
-            tuple,
-            inputSchema: previousPrepareOutput,
-            outputSchema: [],
-            block,
+        // Fix the tuple
+        tuple = {
+            t: 'step',
+            verb: 'join',
+            attrs: {
+                [tuple.verb]: {
+                    t: 'tag',
+                    value: { t: 'no_value' }
+                },
+                ...tuple.attrs,
+            }
         }
     }
 
-    if (verbDef.prepare)
-        verbDef.prepare({graph: plannedQuery.graph, tuple, later: block, incomingSchema: previousPrepareOutput});
-
-    // Do a pass to find out the output schema.
-    const schemaOutput = new Stream();
-    executeBlockSchemaOnly(block, {
-        graph: plannedQuery.graph,
-        step_context: plannedQuery.context,
-        step_input: Stream.fromList(previousPrepareOutput),
-        step_output: schemaOutput,
-    });
-    schemaOutput.sendDoneIfNeeded();
-
-    return {
+    const step: PlannedStep = {
         id,
         tuple,
+        verbDef,
         inputSchema: previousPrepareOutput,
-        outputSchema: schemaOutput.take(),
-        block,
+        outputSchema: [],
+        errors: [],
+        sawUsedMounts: [],
     }
+
+    const schemaStream = runStepToGetSchema(plannedQuery, step);
+    const [ output, errors ] = schemaStream.takeItemsAndErrors();
+    step.outputSchema = output;
+    step.errors = errors;
+
+    return step;
 }
 
-function replaceOnePlannedStep(plannedQuery: PlannedQuery, steps: PlannedStep[], stepIndex: number, newTuple: QueryTuple) {
+function replaceOnePlannedStep(plannedQuery: PlannedQuery, steps: PlannedStep[], stepIndex: number, newTuple: QueryStep) {
     const previousStep = steps[stepIndex - 1];
     const previousOutput = (previousStep && previousStep.outputSchema) || [];
     steps[stepIndex] = createOnePlannedStep(plannedQuery, newTuple, previousOutput);
@@ -157,7 +139,6 @@ export function createInitialPlannedSteps(plannedQuery: PlannedQuery) {
         return;
     }
 
-    // Run .prepare on each step.
     let previousPrepareOutput = [];
 
     for (const tuple of query.steps) {
@@ -188,10 +169,13 @@ function handlePlanTimeVerbs(plannedQuery: PlannedQuery) {
 
             // Try to pull the attr from this table.
             if (step.tuple.verb === 'get') {
-                const enhancedTuple: QueryTuple = {
-                    t: 'tuple',
+                const enhancedTuple: QueryStep = {
+                    t: 'step',
                     verb: step.tuple.verb,
-                    tags: step.tuple.tags.concat([{ t: 'tag', attr, value: { t: 'no_value' }}]),
+                    attrs: {
+                        ...step.tuple.attrs,
+                        [attr]: { t: 'tag', value: { t: 'no_value' } },
+                    }
                 }
 
                 const existingMatch = findBestPointMatch(graph, step.tuple);
@@ -208,12 +192,13 @@ function handlePlanTimeVerbs(plannedQuery: PlannedQuery) {
         // Failed to bring in the attr - TODO is record an error.
     }
 
+    // Handle 'need' verbs
     for (let stepIndex=0; stepIndex < steps.length; stepIndex++) {
         const step = steps[stepIndex];
 
         if (step.tuple.verb === 'need') {
-            for (const tag of step.tuple.tags)
-                bringInAttr(stepIndex - 1, tag.attr);
+            for (const attr of Object.keys(step.tuple.attrs))
+                bringInAttr(stepIndex - 1, attr);
             continue;
         }
 
@@ -232,7 +217,7 @@ function optimizeForProviders(plannedQuery: PlannedQuery) {
     const fixedSteps: PlannedStep[] = [];
     let wipProviderId: string = null;
     let wipProviderRemoteQuery: Query = null;
-    let wipProviderQuery: QueryTuple = null;
+    let wipProviderQuery: QueryStep = null;
 
     function finishInProgressProviderQuery() {
         if (!wipProviderQuery)
@@ -246,14 +231,10 @@ function optimizeForProviders(plannedQuery: PlannedQuery) {
         }
 
         // Save the wipProviderQuery that was in progress.
-        wipProviderQuery.tags.push({
+        wipProviderQuery.attrs['query'] = {
             t: 'tag',
-            attr: 'query',
-            value: {
-                t: 'query_value',
-                query: wipProviderRemoteQuery,
-            },
-        });
+            value: wipProviderRemoteQuery,
+        };
 
         const insertStep = createOnePlannedStep(plannedQuery, wipProviderQuery, []);
         // console.log('created step for provider: ', JSON.stringify(wipProviderQuery, null, 2));
@@ -272,21 +253,22 @@ function optimizeForProviders(plannedQuery: PlannedQuery) {
             wipProviderId = providerId;
 
             wipProviderRemoteQuery = {
-                t: 'pipedQuery',
+                t: 'query',
                 steps: [],
             }
 
             wipProviderQuery = {
-                t: 'tuple',
+                t: 'step',
                 verb: 'run_query_with_provider',
-                tags: [{
-                    t: 'tag',
-                    attr: 'provider_id',
-                    value: {
-                        t: 'str_value',
-                        str: providerId
-                    },
-                }],
+                attrs: {
+                    provider_id: {
+                        t: 'tag',
+                        value: {
+                            t: 'str_value',
+                            str: providerId
+                        },
+                    }
+                }
             };
         }
 
@@ -302,28 +284,14 @@ function optimizeForProviders(plannedQuery: PlannedQuery) {
 }
 
 function finalizeBlocks(plannedQuery: PlannedQuery) {
-    if (plannedQuery.context.mod) {
-        // run the AstModification on every step.
-        for (const step of plannedQuery.steps) {
-            step.block = runAstModification(plannedQuery.graph, step.block, plannedQuery.context.mod);
-        }
-    }
 }
 
 function findProviderUsedByStep(plannedQuery: PlannedQuery, step: PlannedStep) {
     const providers = new Map();
-    const block = step.block;
 
-    if (!block || !block.terms)
-        return null;
-
-    for (const term of block.terms) {
-        if (term.f === 'call_mount_point') {
-            const mountPointRef = block.getStaticValue(term.inputs[2]);
-            const point = plannedQuery.graph.getMountPoint(mountPointRef);
-            providers.set(point.providerId, true);
-            //console.log(`${JSON.stringify(step.tuple)} calls: ${JSON.stringify(mountPointRef)}`);
-        }
+    for (const usedMountRef of (step.sawUsedMounts || [])) {
+        const point = plannedQuery.graph.getMountPoint(usedMountRef);
+        providers.set(point.providerId, true);
     }
 
     if (providers.size > 1)
@@ -331,4 +299,29 @@ function findProviderUsedByStep(plannedQuery: PlannedQuery, step: PlannedStep) {
 
     const providersList = Array.from(providers.keys());
     return providersList[0];
+}
+
+export function runStepToGetSchema(plannedQuery: PlannedQuery, plannedStep: PlannedStep): Stream {
+
+    const input = Stream.fromList(plannedStep.inputSchema);
+    const output = new Stream();
+
+    const step = new Step({
+        graph: plannedQuery.graph,
+        context: plannedQuery.context,
+        tuple: plannedStep.tuple,
+        id: plannedStep.id,
+        input,
+        output,
+    });
+
+    step.incomingSchema = plannedStep.inputSchema;
+    step.schemaOnly = true;
+
+    plannedStep.verbDef.run(step);
+
+    output.sendDoneIfNeeded();
+    plannedStep.sawUsedMounts = step.sawUsedMounts;
+    
+    return output;
 }

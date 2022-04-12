@@ -1,10 +1,7 @@
 
 import { Item } from './Item'
-import { TransformDefs } from './transforms/_list'
-import { Step } from './Step'
 import { Graph } from './Graph'
 import { javascriptQuickMountIntoGraph } from './QuickMount'
-import { Scope } from './Scope'
 import { Stream } from './Stream'
 import { Query, QueryLike, toQuery } from './Query'
 import { runQuery } from './RunningQuery'
@@ -62,14 +59,14 @@ export function applyTransform(graph: Graph, items: Item[], query: Query): Strea
         throw new Error('applyTransform expected a transform query');
     }
 
-    const scope = new Scope(graph);
     const inputAsStream = new Stream();
 
-    const output = runQuery(null, query, inputAsStream);
+    const output = runQuery(null, query, { '$input': inputAsStream });
 
     for (const item of items) {
         inputAsStream.put(item);
     }
+
     inputAsStream.done();
 
     return output;
@@ -92,7 +89,13 @@ export function applyTransformationToGraph(graph: Graph, transformLike: QueryLik
     // Delete the current contents.
     const deleteStep = {
         ...accessStep,
-        tags: accessStep.tags.concat({ t: 'tag', attr: 'delete!', value: { t: 'no_value' } }),
+        attrs: {
+            ...accessStep.attrs,
+            'delete!': {
+                t: 'tag',
+                value: { t: 'no_value' }
+            }
+        }
     };
 
     graph.query(deleteStep);

@@ -1,5 +1,5 @@
 
-import { Stream, PipedData } from '../Stream'
+import { Stream, PipedData, SchemaItem } from '../Stream'
 import { IDSource } from '../utils/IDSource'
 import { Item } from '../Item'
 import { ErrorItem } from '../Errors'
@@ -7,7 +7,7 @@ import { TableFormatState, newTableFormatState, formatItems, updateStateForItems
     formatHeader, printItems } from './TableFormatter';
 import { Graph } from '../Graph';
 import { Table } from '../Table'
-import { queryTupleToString } from '../Query'
+import { queryStepToString } from '../Query'
 
 interface Task {
     id: string
@@ -27,7 +27,7 @@ interface Settings {
 
 type MostRecentOutput = 'none' | 'log' | 'prompt' | 'submitted' | { t: 'dataWithHeader', header: string }
 
-export class LiveConsoleFormatter {
+export class ConsoleFormatter {
     // expose a interface for incoming Streams
     // keep track of whether the prompt is visible
     // show in-progress tasks
@@ -59,7 +59,7 @@ export class LiveConsoleFormatter {
         this.mostRecentOutput = 'none';
     }
 
-    createTask(): Task {
+    newTask(): Task {
         const id = this.nextTaskId.take();
         const incoming = new Stream();
         this.mostRecentOutput = 'submitted';
@@ -75,8 +75,21 @@ export class LiveConsoleFormatter {
         incoming.sendTo({
             receive: (msg: PipedData) => {
                 switch (msg.t) {
-                case 'header':
-                    this.header = msg.item;
+                case 'schema':
+                    task.formatState.schema = msg.item;
+
+                    // check for (...console_format_options) on this schema
+                    this.graph.query([{ attrs: { ...msg.item, console_format_options: null } }])
+                    .sendTo({
+                        receive: (msg) => {
+                            switch (msg.t) {
+                                case 'item':
+                                    task.formatState.options = msg.item.console_format_options;
+                                    break;
+                            }
+                        }
+                    });
+                    
                     break;
                 case 'item':
                     task.buffer.push(msg.item);
@@ -103,7 +116,7 @@ export class LiveConsoleFormatter {
         if (error.errorType === 'no_table_found') {
 
             if (error.query)
-                this.log(`error: No table found for query: ${queryTupleToString(error.query)}`);
+                this.log(`error: No table found for query: ${queryStepToString(error.query)}`);
             else
                 this.log(`error: No table found for query: ${JSON.stringify(error)}`);
 
@@ -119,7 +132,7 @@ export class LiveConsoleFormatter {
     }
 
     printTable(table: Table) {
-        const task = this.createTask();
+        const task = this.newTask();
         task.incoming.putTableItems(table);
         task.incoming.done();
     }
@@ -156,7 +169,7 @@ export class LiveConsoleFormatter {
         const items = task.buffer;
         task.buffer = [];
 
-        const formatted = formatItems(items);
+        const formatted = formatItems(task.formatState, items);
         updateStateForItems(task.formatState, formatted);
         const header = formatHeader(task.formatState);
 

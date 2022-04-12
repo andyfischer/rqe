@@ -1,10 +1,20 @@
 
 import { Graph } from './Graph'
-import { MountPoint } from './MountPoint'
+import { MountPointSpec } from './MountPoint'
 import { Table } from './Table'
-import { Block } from './Block'
-import { queryToString, queryTupleToString } from './Query'
+import { queryToString, queryStepToString } from './Query'
 import { PlannedQuery } from './Planning'
+import { formatTable } from './format/TableFormatter'
+import { taggedToString } from './TaggedValue'
+import { EnableWarningOnUnserializableData } from './config'
+
+declare global {
+    interface Console {
+      slog: typeof console.log
+    }
+}
+
+console.slog = structuredConsoleLog;
 
 export function graphToString(graph: Graph, options: { reproducible?: boolean } = {}) {
     const out: string[] = [];
@@ -30,7 +40,26 @@ export function graphToString(graph: Graph, options: { reproducible?: boolean } 
     return out.join('\n');
 }
 
-export function tableToString(table: Table) {
+export function graphTablesToString(graph: Graph, options: { reproducible?: boolean } = {}) {
+    const out: string[] = [];
+
+    if (graph.graphId && !options.reproducible)
+        out.push(`Graph ${graph.graphId || ''} contents:`);
+    else
+        out.push(`Graph contents:`);
+
+    for (const table of graph.tables.values()) {
+        out.push(`  [${table.name}]`);
+        for (const line of formatTable(table)) {
+            out.push('  ' + line);
+        }
+    }
+
+    return out.join('\n');
+}
+
+
+export function tableSchemaToString(table: Table) {
     let out: string[] = [];
 
     if (table.name)
@@ -45,11 +74,11 @@ export function tableToString(table: Table) {
     return out.join('\n');
 }
 
-export function mountPointToString(spec: MountPoint) {
+export function mountPointToString(spec: MountPointSpec) {
     let requiredAttrs = [];
     let outputAttrs = [];
 
-    for (const [attr, config] of spec.attrs.entries()) {
+    for (const [attr, config] of Object.entries(spec.attrs)) {
         if (config.required)
             requiredAttrs.push(attr);
         else
@@ -67,39 +96,6 @@ export function mountPointToString(spec: MountPoint) {
     return out;
 }
 
-export function blockToString(block: Block, options: { omitHeader?: boolean } = {}) {
-    const out: string[] = [];
-
-    if (!options.omitHeader)
-        out.push('Block:');
-
-    for (let termIndex=0; termIndex < block.terms.length; termIndex++) {
-        const term = block.terms[termIndex];
-
-        if (term.comment) {
-            if (out.length > 1)
-                out.push('');
-            out.push(`  // ${term.comment}`);
-        }
-
-        const idPrefix = term.id ? `#${term.id} ` : '';
-
-        const inputStrs = term.inputs.map(input => {
-            switch (input.t) {
-                case 'local_input':
-                    return `#${input.id}`
-                case 'block_input':
-                    return `#${input.name}`
-                case 'value':
-                    return valueToString(input.value);
-            }
-        });
-        out.push(`  ${idPrefix}${term.f}(${inputStrs.join(', ')})`);
-    }
-
-    return out.join('\n');
-}
-
 export function valueToString(value: any) {
     if (!value)
         return JSON.stringify(value);
@@ -108,7 +104,7 @@ export function valueToString(value: any) {
     case 'pipedQuery':
         return `(${queryToString(value)})`;
     case 'queryStep':
-        return `(${queryTupleToString(value)})`;
+        return `(${queryStepToString(value)})`;
     }
 
     return JSON.stringify(value);
@@ -120,9 +116,55 @@ export function planToString(plannedQuery: PlannedQuery) {
     out.push("Planned query:");
     for (const step of plannedQuery.steps) {
         out.push(` [Step #${step.id}]`);
-        out.push(`  tuple:   (${queryTupleToString(step.tuple)})`);
+        out.push(`  tuple:   (${queryStepToString(step.tuple)})`);
         out.push(`  outputs: ${JSON.stringify(step.outputSchema)}`);
     }
 
     return out.join('\n');
+}
+
+export function structuredConsoleLog(...args: any[]) {
+    const out = args.map(arg => {
+        if (arg.t) {
+            return taggedToString(arg);
+        } else {
+            return arg;
+        }
+    });
+
+    console.log.apply(null, out);
+}
+
+export function assertDataIsSerializable(data: any) {
+    if (EnableWarningOnUnserializableData) {
+
+        // At the moment the important one to catch is Function because it will be silently ignored
+        // by JSON.serialize.
+        //
+        // Other types that are silently ignored are Undefined (which is fine) and Symbol (not used)
+        //
+        // There are other possible serialization errors (like cyclic references) but these throw an
+        // exception in JSON.serialize, so there's your assertion, buddy.
+
+        if (typeof data === 'function') {
+            const err = new Error("can't serialize type: function");
+            err['badType'] = 'function'
+            err['path'] = [];
+            throw err;
+        }
+
+        if (typeof data === 'object') {
+            for (const [k,v] of Object.entries(data)) {
+                try {
+                    assertDataIsSerializable(v);
+                } catch (err) {
+                    if (err['badType']) {
+                        err['path'] = [k].concat(err['path']);
+                        err.message = `can't serialize type: ${err['badType']} (at path: ${err['path'].join('.')})`;
+                        throw err;
+                    }
+                }
+            }
+        }
+    }
 }

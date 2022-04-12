@@ -1,7 +1,7 @@
 
 import { Step } from '../Step'
 import { c_item } from '../Enums'
-import { QueryTuple } from '../Query'
+import { QueryStep } from '../Query'
 
 function run(step: Step) {
 
@@ -11,19 +11,22 @@ function run(step: Step) {
             case c_item:
                 step.output.receive(msg);
 
-                const tuple: QueryTuple = {
-                    t: 'tuple',
-                    tags: step.tuple.tags.map(tag => {
-                        if (tag.attr === 'item')
-                            return { t: 'tag', attr: 'item', value: { t: 'item', item: msg.item }}
-                        return tag;
-                    }),
-                    verb: 'get',
-                };
+                if (!step.schemaOnly) {
 
-                step.graph.query(tuple);
+                    const fixedAttrs = { ...step.tuple.attrs }
+                    if (fixedAttrs.item)
+                        fixedAttrs.item = { t: 'tag', value: { t: 'item', item: msg.item }}
 
-                // TODO: should wait on query to finish.
+                    const tuple: QueryStep = {
+                        t: 'step',
+                        attrs: fixedAttrs,
+                        verb: 'get',
+                    };
+
+                    step.graph.query(tuple);
+
+                    // TODO: should wait on query to finish.
+                }
 
                 break;
             default:
