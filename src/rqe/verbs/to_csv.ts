@@ -4,6 +4,10 @@ import { Table } from '../Table'
 import { formatAsCsv } from '../format/csv'
 
 function run(step: Step) {
+    if (step.schemaOnly) {
+        step.output.done();
+        return;
+    }
 
     step.input.then((result: Table) => {
         const out = [];
