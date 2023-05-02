@@ -1,7 +1,7 @@
 
-import { assertDataIsSerializable } from '../Debug'
+import { assertDataIsSerializable } from '../validation/Serialization'
 
-export class LocalEventSource implements EventSource {
+export class LocalEventSource<T = any> implements EventSource<T> {
     listeners = [];
 
     addListener(callback) {
@@ -12,7 +12,7 @@ export class LocalEventSource implements EventSource {
         this.listeners = this.listeners.filter(c => c !== callback);
     }
 
-    emit(msg: any = null) {
+    emit(msg: T = null) {
         for (const listener of this.listeners) {
             try {
                 listener(msg);
@@ -32,7 +32,7 @@ export interface Port<IncomingMessage = any, OutgoingMessage = any> {
     postMessage(msg: OutgoingMessage): any
     disconnect(): void
     onMessage: EventSource<IncomingMessage>
-    onDisconnect: EventSource<void>
+    onDisconnect: EventSource<any>
 }
 
 export function portErrorWrap(port: Port, onPortError: (e) => void): Port {
@@ -71,6 +71,7 @@ class LocalPort<IncomingMessage = any, OutgoingMessage = any> implements Port<In
 
         if (this.disconnected)
             throw new Error('disconnected');
+
         this.getPair().onMessage.emit(msg);
     }
 

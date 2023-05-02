@@ -1,6 +1,9 @@
 
-export interface ParseError {
-    t: 'parseError',
-    parsing: 'queryTuple',
+export class ParseError extends Error {
+    t = 'parseError'
     message: string
+
+    constructor(message) {
+        super(message);
+    }
 }

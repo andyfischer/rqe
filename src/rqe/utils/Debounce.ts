@@ -7,7 +7,7 @@ for each delay.
 
 */
 
-export default class Debounce {
+export class Debounce {
     callback = null;
     delayMs: number
     pending = null;
@@ -21,11 +21,11 @@ export default class Debounce {
     post(...args: any[]) {
         this.pendingArgs = args;
         if (!this.pending) {
-            this.pending = setTimeout(() => this.fire(), this.delayMs);
+            this.pending = setTimeout(() => this._fire(), this.delayMs);
         }
     }
 
-    fire() {
+    _fire() {
         delete this.pending;
         const args = this.pendingArgs;
         delete this.pendingArgs;
@@ -38,3 +38,7 @@ export default class Debounce {
     }
 }
 
+export function debounceCallback(delayMs: number, callback: () => void) {
+    const debounce = new Debounce(callback, delayMs);
+    return () => debounce.post();
+}

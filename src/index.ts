@@ -1,2 +1,2 @@
 
-export { newGraph, Graph, Table, Stream, query, declare } from './rqe'
+export { Graph, Table, Stream } from './rqe'

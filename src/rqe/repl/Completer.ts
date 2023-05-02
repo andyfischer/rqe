@@ -1,8 +1,8 @@
 
-import { Graph } from '../Graph'
-import { listEveryVerb } from '../verbs/_list'
+import { GraphLike } from '../graph'
+// import { listEveryVerb } from '../verbs/_list'
 
-export function getCompletions(graph: Graph, line: string): string[] {
+export function getCompletions(graph: GraphLike, line: string): string[] {
     if (!line || line === "")
         return [];
 
@@ -19,17 +19,23 @@ export function getCompletions(graph: Graph, line: string): string[] {
 
     const found = new Map<string,true>();
 
+    /*
     for (const verb of listEveryVerb()) {
         if (verb.startsWith(lastWord))
             found.set(verb, true);
     }
+    */
 
-    for (const table of graph.everyMountPoint()) {
-        for (const attr of Object.keys(table.attrs)) {
-            if (attr.startsWith(lastWord))
-                found.set(attr, true);
+    /*
+    if ((graph as Graph).everyMountPoint) {
+        for (const table of (graph as Graph).everyMountPoint()) {
+            for (const attr of Object.keys(table.attrs)) {
+                if (attr.startsWith(lastWord))
+                    found.set(attr, true);
+            }
         }
     }
+    */
 
     const completions = [];
     for (const key of found.keys())

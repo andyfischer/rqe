@@ -1,8 +1,8 @@
 
-export class IDSourceNumber {
+export class IDSource {
     next: number = 1;
 
-    copyFrom(source: IDSourceNumber) {
+    copyFrom(source: IDSource) {
         this.next = source.next;
     }
 
@@ -13,7 +13,7 @@ export class IDSourceNumber {
     }
 }
 
-export class IDSource {
+export class StringIDSource {
     prefix: string;
     next: number = 1;
 

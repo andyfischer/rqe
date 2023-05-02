@@ -1,474 +1,394 @@
 
-import { Item } from './Item'
-import { Table } from './Table/index'
-import { c_done, c_item } from './Enums'
-import { ErrorItem, ErrorType } from './Errors'
-import { IDSourceNumber as IDSource } from './utils/IDSource'
-import { streamingTransform, StreamingTransformFunc, StreamingTransformOptions } from './Concurrency'
-import { StreamSuperTrace } from './config'
+import { toException, ErrorItem } from './Errors'
+import { captureException, ErrorContext } from './Errors'
+import { openAsyncIterator } from './utils/openAsyncIterator'
+import { StreamSuperTrace, StreamSuperDuperTrace } from './config'
 
-interface PipeItem {
-    t: 'item',
-    item: any
+/*
+ * Stream2 goals (versus stream 1)
+ *
+ * Separate message for 'items_done' versus 'close'.
+ *
+ * No graph. Less extra stuff.
+ *
+ * No forceClose (any close needs to be either from upstream or downstream)
+ *
+ * Clean up the live updating events. No 'patch_mode'
+ *
+ * Improve the error event.
+ */
+
+export const c_item = 'item';
+export const c_close = 'close';
+export const c_restart = 'items_restart';
+export const c_done = 'items_done';
+export const c_error = 'error';
+export const c_header = 'header';
+export const c_related = 'related';
+export const c_comment = 'comment';
+export const c_schema = 'schema';
+export const c_delete = 'delete';
+export const c_info = 'info';
+export const c_warn = 'warn';
+
+export type LogLevel = typeof c_info | typeof c_warn
+
+export interface StreamItem<ItemType = any> { t: typeof c_item, item: ItemType }
+export interface StreamClose { t: typeof c_close }
+export interface StreamError { t: typeof c_error, error: ErrorItem, }
+export interface StreamHeader { t: typeof c_header, comment?: string }
+export interface StreamSchema { t: typeof c_schema, item: any }
+export interface StreamRestart { t: typeof c_restart }
+export interface StreamRelatedItem { t: typeof c_related, item: any }
+export interface StreamComment { t: typeof c_comment, message: string, level?: LogLevel, details?: any }
+export interface StreamDone { t: typeof c_done }
+export interface StreamDelete { t: typeof c_delete, item: any }
+
+export type StreamEvent<ItemType = any> = StreamSchema | StreamItem<ItemType> | StreamError
+    | StreamRelatedItem | StreamComment
+    | StreamClose | StreamHeader
+    | StreamRestart | StreamDone | StreamDelete
+
+export interface StreamReceiver<ItemType = any> {
+    receive(event: StreamEvent<ItemType>): void
 }
 
-export interface PipeDone {
-    t: 'done',
-}
+export type StreamReceiverCallback<ItemType = any> = (event: StreamEvent<ItemType>) => void
 
-export interface PipeError {
-    t: 'error',
-    item: ErrorItem
-}
+export type LooseStreamReceiver<ItemType = any> = StreamReceiver<ItemType> | StreamReceiverCallback<ItemType>
 
-export interface PipeHeader {
-    t: 'header'
-    item: Item
-}
+export class Stream<ItemType = any> implements StreamReceiver {
+    t = 'stream'
+    label?: string
+    receiver: StreamReceiver = null
+    closedByUpstream = false;
+    closedByDownstream = false;
 
-export interface AttrSchema {
-    type?: string
-}
+    // Backlog data (if the output isn't connected yet)
+    backlog: StreamEvent[] = []
 
-export interface SchemaItem {
-   [attr: string]: AttrSchema
-}
-
-export interface PipeSchema {
-    t: 'schema'
-    item: SchemaItem
-}
-
-export type TransformFunc = (item: Item) => Item | Item[]
-export type AggregationFunc = (item: Item[]) => Item | Item[]
-
-export type PipedData = PipeHeader | PipeItem | PipeDone | PipeError | PipeSchema
-
-export interface PipeReceiver {
-    receive(data: PipedData): void
-}
-
-export function joinStreams(count: number, output: Stream) {
-
-    const receivers: Stream[] = [];
-    let unfinishedCount = count;
-
-    for (let i=0; i < count; i++) {
-        receivers.push(Stream.newStreamToReceiver({
-            receive(data: PipedData) {
-
-                if (data.t === 'done') {
-                    if (unfinishedCount === 0)
-                        throw new Error("joinStreams got too many 'done' messages");
-
-                    unfinishedCount--;
-
-                    if (unfinishedCount !== 0)
-                        return;
-                }
-
-                output.receive(data);
-            }
-        }))
+    constructor(label?: string) {
+        this.label = label;
     }
 
-    return receivers;
+    isStream() {
+        return true;
+    }
+
+    isDone() {
+        return this.closedByUpstream || this.closedByDownstream;
+    }
+
+    hasDownstream() {
+        return !!this.receiver;
+    }
+
+    _sendToReceiver(event: StreamEvent) {
+        try {
+            this.receiver.receive(event);
+        } catch (e) {
+            if (e['backpressure_stop'] || e['is_backpressure_stop']) {
+                this.closeByDownstream();
+
+                return;
+            }
+
+            throw e;
+        }
+    }
+
+    receive(event: StreamEvent) {
+
+        if (this.closedByDownstream)
+            throw new BackpressureStop();
+
+        if ((event as any).t === 'done') {
+            // Back compatibility with Stream v1
+            this.receive({t: c_done });
+            this.receive({t: c_close });
+            return;
+        }
+
+        if (StreamSuperTrace || StreamSuperDuperTrace) {
+            console.log(`Stream ${this.label} received:`, event);
+
+            if (StreamSuperDuperTrace) {
+                const trace = ((new Error()).stack + '').replace(/^Error:/, '');
+                console.log('at: ' + trace);
+            }
+        }
+
+        switch (event.t) {
+        case c_close:
+            if (this.closedByUpstream)
+                throw new ProtocolError("Got a duplicate 'close' event");
+
+            this.closedByUpstream = true;
+            break;
+        }
+
+        if (this.receiver) {
+            this._sendToReceiver(event);
+            
+        } else {
+            this.backlog.push(event);
+        }
+
+        if (this.closedByUpstream)
+            // Help garbage collection
+            this.receiver = null;
+    }
+
+    sendTo(receiver: LooseStreamReceiver) {
+        if (typeof receiver === 'function')
+            receiver = { receive: receiver };
+
+        if (this.hasDownstream())
+            throw new UsageError("Stream already has a receiver");
+
+        if (!receiver.receive)
+            throw new UsageError("invalid StreamReceiver, missing .receive")
+
+        this.receiver = receiver;
+
+        if (StreamSuperTrace) {
+            console.log(`Stream ${this.label} is now sending to:`,
+                        (receiver as any).getDebugLabel ? (receiver as any).getDebugLabel() : 'anonymous receiver');
+        }
+
+        if (this.backlog) {
+            // Send the pending backlog.
+            const backlog = this.backlog;
+            delete this.backlog;
+
+            for (const event of backlog) {
+                this._sendToReceiver(event);
+            }
+        }
+    }
+
+    collectEvents(callback: (events: StreamEvent[]) => void) {
+        let events: StreamEvent[] = [];
+
+        this.sendTo({
+            receive(msg: StreamEvent) {
+                if (msg.t === c_done) {
+                    callback(events);
+
+                    events = null;
+                    callback = null;
+                    return;
+                }
+
+                events.push(msg);
+            }
+        });
+    }
+
+    collectEventsSync(): StreamEvent[] {
+        let events: StreamEvent[] = null;
+
+        this.collectEvents(_events => { events = _events });
+
+        if (events === null)
+            throw new UsageError("Stream did not finish synchronously");
+
+        return events;
+    }
+
+    promiseEvents() {
+        return new Promise<StreamEvent[]>((resolve, reject) => {
+            this.collectEvents(resolve);
+        });
+    }
+
+    promiseItems() {
+        return new Promise<ItemType[]>((resolve, reject) => {
+            let items: ItemType[] = [];
+
+            this.sendTo({
+                receive(msg: StreamEvent) {
+
+                    if (msg.t === c_item) {
+                        items.push(msg.item)
+                    } else if (msg.t === c_done) {
+                        resolve(items);
+                        items = null;
+                    } else if (msg.t === c_error) {
+                        reject(toException(msg.error));
+                    }
+                }
+            });
+        });
+    }
+
+    // Consume this stream as a sync iterator.
+    *[Symbol.iterator]() {
+        yield* this.collectEventsSync();
+    }
+    
+    // Consume this stream as an async iterator.
+    async* [Symbol.asyncIterator]() {
+
+        const { send, iterator } = openAsyncIterator();
+
+        this.sendTo({ receive: send });
+
+        for await (const evt of iterator) {
+            switch (evt.t) {
+            case c_done:
+                return;
+            case c_item:
+                yield evt.item;
+                break;
+            case c_error:
+                throw toException(evt.item);
+            }
+        }
+    }
+
+    takeBacklog(): StreamEvent[] {
+        if (this.receiver)
+            throw new UsageError("can't call takeBacklog, stream has a receiver");
+
+        const items = this.backlog;
+        this.backlog = [];
+        return items;
+    }
+
+    // Helper functions to put events
+    put(item: ItemType) {
+        this.receive({ t: c_item, item });
+    }
+
+    putRelated(item: any) {
+        this.receive({ t: c_related, item });
+    }
+
+    putError(error: ErrorItem) {
+        this.receive({ t: c_error, error });
+    }
+
+    putException(err: Error, context?: ErrorContext) {
+        this.receive({ t: c_error, error: captureException(err, context) });
+    }
+
+    comment(message: string, level?: LogLevel, details?: any) {
+        this.receive({ t: c_comment, message, level, details });
+    }
+
+    done() {
+        this.receive({t: c_done});
+    }
+
+    close() {
+        this.receive({t: c_close});
+    }
+
+    closeWithError(error: ErrorItem) {
+        this.receive({t: c_error, error});
+        this.receive({t: c_close});
+    }
+
+    finish() {
+        this.receive({t: c_done});
+        this.receive({t: c_close});
+    }
+
+    spyEvents(callback: (evt: StreamEvent<ItemType>) => void): Stream<ItemType> {
+        const output = new Stream<ItemType>();
+
+        this.sendTo({
+            receive(evt) {
+                callback(evt);
+                output.receive(evt);
+            }
+        });
+
+        return output;
+    }
+
+    transform<OutputType = ItemType>(callback: (item: ItemType) => OutputType): Stream<OutputType> {
+        const output = new Stream<OutputType>();
+
+        this.sendTo({
+            receive(evt) {
+                switch (evt.t) {
+                    case c_item:
+                        try {
+                            const transformed = callback(evt.item);
+                            output.put(transformed);
+                        } catch (e) {
+                            output.putException(e);
+                        }
+                        break;
+                    default:
+                        output.receive(evt as StreamEvent<OutputType>);
+                }
+            }
+        });
+
+        return output;
+    }
+
+    closeByDownstream() {
+        if (this.closedByDownstream)
+            return;
+
+        this.closedByDownstream = true;
+
+        this.receiver = null;
+        if (this.backlog) {
+            this.backlog = [];
+        }
+    }
+
+    static newEmptyStream(label?: string) {
+        const stream = new Stream(label);
+        stream.done();
+        stream.close();
+        return stream;
+    }
+
+    static fromList<ItemType = any>(items: ItemType[]) {
+        const stream = new Stream<ItemType>();
+        for (const item of items)
+            stream.put(item);
+        stream.done();
+        stream.close();
+        return stream;
+    }
 }
 
+export function isStream(value: any) {
+    return value?.t === 'stream'
+}
+
+export function isPromise(value: any) {
+    return !!(value?.then);
+}
+
+
 export class BackpressureStop extends Error {
-    backpressure_stop = true
+    is_backpressure_stop = true
 
     constructor() {
         super("Can't put to stream (backpressure stop)");
     }
 }
 
-const nextStreamId = new IDSource();
+export class ProtocolError extends Error {
+    is_stream_protocol_error = true
 
-export class Stream {
-
-    t = 'stream'
-    id: number
-    label?: string
-    downstream: PipeReceiver
-    receivedDone = false;
-
-    // Backlog data (if the output isn't connected yet)
-    _backlog: PipedData[]
-
-    _backpressureStop: boolean
-
-    constructor(label?: string) {
-        this.label = label;
-        this.id = nextStreamId.take();
+    constructor(msg: string) {
+        super("Stream protocol error: " + msg);
     }
+}
 
-    isDone() {
-        return this.receivedDone;
-    }
+export class UsageError extends Error {
+    is_stream_usage_error = true
 
-    isKnownEmpty() {
-        return this.receivedDone && !this.downstream && (!this._backlog || this._backlog.length === 0);
-    }
-
-    getDebugLabel() {
-        let out = `#${this.id}`
-        if (this.label)
-            out += ` (${this.label})`;
-        return out;
-    }
-
-    receive(data: PipedData) {
-        if (StreamSuperTrace) {
-            console.log(`Stream ${this.getDebugLabel()} received:`, data);
-        }
-
-        if (data.t !== 'done' && this._backpressureStop) {
-            // console.log('throwing backpressure stop');
-            throw new BackpressureStop();
-        }
-
-        if (this.receivedDone) {
-            throw new Error(`Stream ${this.getDebugLabel()} received more data after 'done': ` + JSON.stringify(data))
-        }
-
-        if (data.t === 'done')
-            this.receivedDone = true;
-
-        if (this.downstream) {
-            this.downstream.receive(data);
-        } else {
-            this._backlog = this._backlog || [];
-            this._backlog.push(data);
-        }
-    }
-
-    sendTo(receiver: PipeReceiver) {
-        if (this.downstream)
-            throw new Error("Stream already has a downstream");
-
-        this.downstream = receiver;
-
-        if (this._backlog) {
-            // Send the pending backlog.
-            const backlog = this._backlog;
-            delete this._backlog;
-
-            for (const data of backlog)
-                this.downstream.receive(data);
-        }
-    }
-
-    transform(output: PipeReceiver, callback: TransformFunc) {
-        this.sendTo({
-            receive: (msg) => {
-
-                switch (msg.t) {
-                    case c_item:
-
-                        let result = callback(msg.item) || [];
-                        if (Array.isArray(result)) {
-                            for (const newItem of (result as Item[]))
-                                output.receive({t: c_item, item: newItem });
-                        } else { 
-                            output.receive({t: c_item, item: result });
-                        }
-
-
-                        break;
-                    default:
-                        output.receive(msg);
-                }
-            }
-        });
-    }
-
-    streamingTransform(output: Stream, callback: StreamingTransformFunc, options: StreamingTransformOptions = {}) {
-        streamingTransform(this, output, callback, options);
-    }
-
-    aggregate(receiver: PipeReceiver, callback: AggregationFunc) {
-
-        let items: Item[] = [];
-
-        this.sendTo({
-            receive: (msg) => {
-                switch (msg.t) {
-                    case c_item:
-                        items.push(msg.item);
-                        break;
-
-                    case c_done:
-                        const result = callback(items);
-                        items = [];
-                        for (const item of result)
-                            receiver.receive({t: c_item, item });
-                        receiver.receive({t: c_done});
-                        break;
-
-                    default:
-                        receiver.receive(msg);
-                }
-            }
-        });
-    }
-
-    async toTable(): Promise<Table> {
-        return new Promise<Table>((resolve, reject) => {
-            this.callback(table => {
-                if (table.hasError())
-                    reject(table.errorsToException());
-                else
-                    resolve(table);
-            });
-        });
-    }
-
-    // Use as a Promise
-    then(onResolve?: (result: Table) => any, onReject?): Promise<Table> {
-        let promise = this.toTable();
-
-        if (onResolve || onReject)
-            promise = promise.then(onResolve, onReject);
-
-        return promise;
-    }
-
-    callback(callback: (table: Table) => void) {
-
-        const result = new Table({
-            name: 'QueryResult'
-        });
-
-        let hasCalledDone = false;
-
-        this.sendTo({
-
-            receive(data: PipedData) {
-                if (hasCalledDone) {
-                    throw new Error("got message after 'done': " + data.t);
-                }
-
-                switch (data.t) {
-                case 'item':
-                    result.put(data.item);
-                    break;
-                case 'error':
-                    result.putError(data.item);
-                    break;
-                case 'done':
-                    hasCalledDone = true;
-                    callback(result);
-                    break;
-                case 'header':
-                    result.putHeader(data.item);
-                    break;
-                case 'schema':
-                    // TODO - use this schema in the table.
-                    break;
-                default:
-                    throw new Error("unhandled case in Stream.callback: " + (data as any).t);
-                }
-            }
-        });
-    }
-
-    sync(opts?: {throwError?: boolean}): Table {
-        let out: Table;
-        const throwError = opts && opts.throwError;
-
-        this.callback(r => { out = r });
-
-        if (out == null)
-            throw new Error("Stream didn't finish synchronously");
-
-        if (throwError !== false)
-            out.throwErrors();
-
-        return out;
-    }
-
-
-    // Helper functions
-    strs() {
-        return this.sync().strs();
-    }
-
-    async one() {
-        const table = await this.toTable();
-        return table.one();
-    }
-
-    // Consume this stream as a sync iterator.
-    *[Symbol.iterator]() {
-        const table = this.sync();
-        yield* table.scan();
-    }
-    
-    // Consume this stream as an async iterator.
-    async* [Symbol.asyncIterator]() {
-
-        let incoming = [];
-        let loopTrigger: () => void = null;
-
-        // Stream listener - Pushes to 'incoming' and calls loopTrigger().
-        this.sendTo({
-            receive(msg) {
-                incoming.push(msg);
-
-                if (loopTrigger) // Might not have the loopTrigger callback yet if we receive something immediately.
-                    loopTrigger();
-            }
-        });
-
-        // Main loop - Reads from 'incoming'.
-        while (true) {
-            const received = incoming;
-            incoming = [];
-            const nextWait = new Promise<void>(r => { loopTrigger = r });
-
-            for (const msg of received) {
-                switch (msg.t) {
-                case c_done:
-                    return;
-                case c_item:
-                    yield msg.item;
-                }
-            }
-
-            // Wait until stream listener calls loopTrigger()
-            await nextWait;
-        }
-    }
-
-    take() {
-        if (!this.receivedDone)
-            throw new Error("can't take(), stream is not yet closed");
-
-        if (this.downstream)
-            throw new Error("can't take(), stream has a downstream");
-
-        const items = [];
-
-        for (const data of this._backlog) {
-            switch (data.t) {
-                case 'item':
-                    items.push(data.item);
-            }
-        }
-        this._backlog = [];
-
-        return items;
-    }
-
-    takeItemsAndErrors() {
-        if (!this.receivedDone)
-            throw new Error("can't take(), stream is not yet closed");
-
-        if (this.downstream)
-            throw new Error("can't take(), stream has a downstream");
-
-        const items = [];
-        const errors = [];
-
-        for (const data of this._backlog) {
-            switch (data.t) {
-                case 'item':
-                    items.push(data.item);
-                    break;
-                case 'error':
-                    errors.push(data.item);
-                    break;
-            }
-        }
-
-        this._backlog = [];
-
-        return [ items, errors ];
-    }
-
-    putHeader(item: Item) {
-        this.receive({ t: 'header', item });
-    }
-
-    putSchema(item: SchemaItem) {
-        this.receive({ t: 'schema', item });
-    }
-
-    put(item: Item) {
-        this.receive({ t: 'item', item });
-    }
-
-    putError(item: ErrorItem) {
-        this.receive({ t: 'error', item });
-    }
-
-    errorAndClose(item: ErrorItem) {
-        this.receive({ t: 'error', item });
-        this.done();
-    }
-
-    putTableItems(table: Table) {
-        for (const item of table.scan())
-            this.put(item);
-    }
-
-    sendError(type: ErrorType, data?: any) {
-        this.receive({ t: 'error', item: { errorType: type, ...data } });
-    }
-
-    sendUnhandledError(error: Error) {
-        // console.error(error);
-        this.sendError('unhandled_error', { message: error.message, stack: error.stack });
-    }
-
-    closeWithError(message: string) {
-        this.receive({t: 'error', item: { errorType: 'unhandled_error', message }});
-        this.receive({t: 'done'});
-    }
-
-    closeWithUnhandledError(e: Error) {
-        // console.error(e);
-
-        if (this.receivedDone) {
-            console.error("Tried to close pipe with error, but pipe is already closed. Error: ", e.stack || e);
-            return;
-        }
-
-        this.receive({t: 'error', item: { errorType: 'unhandled_error', message: e.message || e.toString(), stack: e.stack } });
-        this.receive({t: 'done'});
-    }
-
-    done() {
-        this.receive({t: 'done'});
-    }
-
-    sendDoneIfNeeded() {
-        if (!this.receivedDone)
-            this.receive({t: 'done'});
-    }
-
-    setBackpressureStop() {
-        this._backpressureStop = true;
-    }
-    
-    static newEmptyStream() {
-        const stream = new Stream('newEmptyStream');
-        stream.done();
-        return stream;
-    }
-
-    static fromList(items: Item[]) {
-        const stream = new Stream('fromList');
-        for (const item of items)
-            stream.put(item);
-        stream.done();
-        return stream;
-    }
-
-    static newStreamToReceiver(receiver: PipeReceiver) {
-        const stream = new Stream('newStreamToReceiver');
-        stream.sendTo(receiver);
-        return stream;
+    constructor(msg: string) {
+        super("Stream usage error: " + msg);
     }
 }

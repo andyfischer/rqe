@@ -1,70 +1,44 @@
 
-import { Table } from './Table/index'
-import { TableSchema } from './Schema'
-import { QueryStep, queryStepToString } from './Query'
+import { StringIDSource } from './utils/IDSource'
 
-export type ErrorType = 'verb_not_found' | 'unhandled_error' | 'provider_not_found' | 'missing_parameter'
+export type ErrorType = 'verb_not_found' | 'unhandled_exception' | 'provider_not_found' | 'missing_parameter'
     | 'no_table_found' | 'Unimplemented' | 'TableNotFound'
     | 'MissingAttrs' | 'MissingValue' | 'NotSupported' | 'ExtraAttrs'
+    | 'http_protocol_error' | string
 
 export interface ErrorItem {
-    errorType: ErrorType
+    errorType?: ErrorType
+    errorLayer?: string
+    errorMessage?: string
+    failureId?: string
+    fromQuery?: string
     stack?: any
-    message?: string
-    step?: number
-    verb?: string
-    query?: QueryStep
-    phase?: 'prepare' | 'execute'
+    cause?: any | Error
+    info?: any
 }
 
-export class TableSchemaIssue extends Error {
-    constructor(table: Table, message: string) {
-        super(`Table [${table.name}] schema issue: ${message}`);
-    }
+export interface ErrorContext {
+    errorType?: ErrorType
+    errorLayer?: string
+    cause?: any | Error
 }
 
-interface TableImplementationMetadata {
-    filename?: string
-}
+let _nextFailureId = new StringIDSource('fail-');
 
-export class TableImplementationError extends Error {
-    constructor(message: string, meta?: TableImplementationMetadata) {
-        super(`Module error: ${message}`);
-    }
-}
+export function errorItemToOneLineString(item: ErrorItem) {
+    let out = `error (${item.errorType})`;
 
-export const ErrorTableSchema: TableSchema  = {
-    attrs: {
-        errorType: {},
-        message: {},
-        stack: {},
-        step: {},
-        phase: {},
-    }
+    if (item.errorMessage)
+        out += `: ${item.errorMessage}`;
+
+    return out;
 }
 
 export function errorItemToString(item: ErrorItem) {
-    let out = `${item.errorType} error`;
+    let out = `error (${item.errorType})`;
 
-    const otherDetails = { ...item };
-
-    delete otherDetails.errorType;
-    delete otherDetails.stack;
-    delete otherDetails.message;
-    delete otherDetails.query;
-    delete otherDetails.step;
-    delete otherDetails.phase;
-
-    const otherDetailsString = JSON.stringify(otherDetails);
-
-    if (item.message)
-        out += `: ${item.message}`;
-
-    if (item.query)
-        out += ` (${queryStepToString(item.query)})`;
-
-    if (otherDetailsString !== '{}')
-        out += ` ${otherDetailsString}`
+    if (item.errorMessage)
+        out += `: ${item.errorMessage}`;
 
     if (item.stack)
         out += `\nStack trace: ${item.stack}`
@@ -72,6 +46,66 @@ export function errorItemToString(item: ErrorItem) {
     return out;
 }
 
-export function newErrorTable() {
-    return new Table<ErrorItem>(ErrorTableSchema);
+export class ErrorExtended extends Error {
+    is_error_extended = true
+    errorItem: ErrorItem
+
+    constructor(errorItem: ErrorItem) {
+        super(errorItem.errorMessage || errorItemToString(errorItem));
+        this.errorItem = errorItem;
+    }
+
+    toString() {
+        return errorItemToString(this.errorItem);
+    }
 }
+
+export function toException(item: ErrorItem): ErrorExtended {
+    return new ErrorExtended(item);
+}
+
+export function captureException(error: Error, context: ErrorContext = {}): ErrorItem {
+    if ((error as ErrorExtended).errorItem) {
+        const errorItem = (error as ErrorExtended).errorItem;
+
+        return {
+            errorMessage: errorItem.errorMessage,
+            stack:  errorItem.stack || error.stack,
+            ...context,
+            errorType: errorItem.errorType || context.errorType || 'unhandled_exception',
+        }
+    }
+
+    if (error instanceof Error) {
+        return {
+            errorMessage: error.message,
+            stack: error.stack,
+            ...context,
+            errorType: (error as any).errorType || context.errorType || 'unhandled_exception',
+        };
+    }
+
+    // Received some other value as an error.
+    return {
+        errorMessage: typeof error === 'string' ? error : ((error as any).errorMessage || (error as any).message),
+        stack: (error as any).stack,
+        ...context,
+        errorType: (error as any).errorType || context.errorType || 'unknown_error',
+    };
+}
+
+export function recordFailure(errorItem: ErrorItem) {
+    errorItem.failureId = errorItem.failureId || _nextFailureId.take();
+
+    // todo - more stuff here
+    console.error('failure: ', errorItemToString(errorItem));
+
+    return errorItem.failureId;
+}
+
+export function recordUnhandledException(error: Error) {
+    // todo - more stuff here
+    console.error('unhandled exception:')
+    console.error(error);
+}
+

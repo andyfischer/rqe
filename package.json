@@ -1,9 +1,9 @@
 {
   "name": "rqe",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "",
   "main": "dist/index.js",
-  "types":"dist/index.d.ts",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p .",
     "prepare": "tsc -p .",
@@ -12,7 +12,7 @@
   "author": "andyfischer",
   "license": "Unlicense",
   "devDependencies": {
-    "@types/node": "^16.11.12",
+    "@types/node": "^18.16.3",
     "typescript": "^4.5.2"
   }
 }
