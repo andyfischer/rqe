@@ -1,5 +1,6 @@
 
 include {
     csv
+    cli
     global_graph
 }
