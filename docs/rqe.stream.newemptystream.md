@@ -4,12 +4,12 @@
 
 ## Stream.newEmptyStream() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-static newEmptyStream(): Stream;
+static newEmptyStream(): Stream<any>;
 ```
-<b>Returns:</b>
+**Returns:**
 
-[Stream](./rqe.stream.md)
+[Stream](./rqe.stream.md)<!-- -->&lt;any&gt;
 

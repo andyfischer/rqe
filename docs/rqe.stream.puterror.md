@@ -4,19 +4,19 @@
 
 ## Stream.putError() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-putError(item: ErrorItem): void;
+putError(error: ErrorItem): void;
 ```
 
 ## Parameters
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  item | ErrorItem |  |
+|  error | ErrorItem |  |
 
-<b>Returns:</b>
+**Returns:**
 
 void
 

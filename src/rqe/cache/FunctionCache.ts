@@ -4,11 +4,9 @@ import { Stream, StreamEvent, c_close, c_restart } from '../Stream'
 import { formatItem } from '../Format'
 import { callbackToStream } from '../handler/NativeCallback'
 import { VerboseLogCacheActivity, VeryVerboseLogCacheActivity } from '../config'
+import { CacheItemHandle } from './CacheItemHandle'
 
-export interface CacheRequest {
-    params: any
-    refreshHandler: (params: any) => any
-}
+export type RequestParams = any
 
 export interface CacheItem {
     id?: number
@@ -21,157 +19,32 @@ export interface CacheItem {
     received_events: StreamEvent[]
     listeners: Stream[]
 
-    refreshHandler: (params: any) => any
-
     live_ref_count: number
 }
 
+export interface HandlerItem {
+    id?: string
+    name?: string
+    scope?: string
+    callback: (params: RequestParams) => void
+}
+
 export type CacheTable = Table<CacheItem>
+export type HandlerTable = Table<HandlerItem>
 
 let _requestCacheSchema: Schema<CacheTable>
+let _handlerTableSchema: Schema<CacheTable>
 
 export function getRequestCacheSchema() {
     if (!_requestCacheSchema) {
-        _requestCacheSchema = compileSchema({
-            name: 'FunctionCache4',
-            attrs: [
-                'input_key','id auto'
-            ],
-            funcs: [
-                'get(id)',
-                'get(input_key)',
-                'delete(input_key)',
-                'each',
-            ]
-        });
         _requestCacheSchema.freeze();
     }
 
     return _requestCacheSchema;
 }
 
-/**
- * Fetch a cache item using the request.
- *
- * May return an existing item if one exists.
- */
-export function getCacheItem(cache: CacheTable, request: CacheRequest): CacheItem {
-    const input_key = formatItem(request.params);
-
-    if (VeryVerboseLogCacheActivity)
-        console.log('getCacheItem looking for: ' + input_key);
-
-    let foundEntry = cache.get_with_input_key(input_key);
-
-    if (foundEntry && foundEntry.expire_at) {
-        if (foundEntry.expire_at < Date.now()) {
-            // Existing value has expired, delete it.
-            cache.delete_with_input_key(input_key);
-            foundEntry = null;
-        }
-    }
-
-    if (foundEntry) {
-        // Found a valid existing result.
-        return foundEntry;
-    }
-
-    // Need to create a new cache item
-    const item: CacheItem = {
-        input_key,
-        cached_at: Date.now(),
-        expire_at: 0,
-        refreshHandler: request.refreshHandler,
-        params: request.params,
-        live_ref_count: 0,
-        result_stream: null,
-        listeners: [],
-        received_events: [],
-    }
-
-    if (VerboseLogCacheActivity)
-        console.log('created cache item: ', item.input_key);
-
-    cache.insert(item);
-
-    // Perform the request and listen to the output.
-    refreshCacheItem(item);
-
-    return item;
-}
-
-export function listenToCacheData(item: CacheItem, output: Stream) {
-    for (const event of item.received_events) {
-        output.receive(event);
-    }
-
-    item.listeners.push(output);
-}
-
 export function cacheItemFilterClosedStreams(item: CacheItem) {
-    item.listeners = item.listeners.filter(listener => !listener.closedByDownstream);
-}
-
-function refreshCacheItem(item: CacheItem) {
-    if (item.result_stream) {
-        item.result_stream.closeByDownstream();
-        item.result_stream = null;
-    }
-
-    const result_stream = new Stream();
-    const received_events: StreamEvent[] = [];
-
-    item.result_stream = result_stream;
-    item.received_events = received_events;
-
-    item.result_stream.sendTo({
-        receive(evt) {
-            if (evt.t === c_close) {
-                // Don't send 'close' to listeners, they stay open.
-                item.result_stream = null;
-                return;
-            }
-
-            received_events.push(evt);
-            let anyClosed = false;
-
-            for (const listener of item.listeners) {
-                if (listener.closedByDownstream) {
-                    anyClosed = true;
-                    continue;
-                }
-
-                listener.receive(evt);
-
-                if (listener.closedByDownstream)
-                    anyClosed = true;
-            }
-
-            if (anyClosed) {
-                cacheItemFilterClosedStreams(item);
-            }
-        }
-    });
-
-    for (const listener of item.listeners)
-        listener.receive({ t: c_restart });
-
-    callbackToStream(() => item.refreshHandler(item.params), item.result_stream)
-}
-
-export function invalidateCacheItem(item: CacheItem) {
-    if (VerboseLogCacheActivity)
-        console.log('invalidating cache item: ', item.params);
-
-    refreshCacheItem(item);
-}
-
-export function invalidateCacheItemsOnCondition(cache: CacheTable, condition: (item: CacheItem) => boolean) {
-    for (const item of cache.each()) {
-        if (condition(item)) {
-            invalidateCacheItem(item);
-        }
-    }
+    item.listeners = item.listeners.filter(listener => !listener.isClosed());
 }
 
 export function startUsingCacheItem(cache: CacheTable, item: CacheItem) {
@@ -191,96 +64,243 @@ export function stopUsingCacheItem(cache: CacheTable, item: CacheItem) {
     }
 }
 
-/*
- * Helper object to manage usage of a cache-based value.
- *
- * This is optimized for use in a React hook.
- *
- * Responsibilities:
- *  - Initial item can be fetched synchronously (intended to be called in useState)
- *  - Listening is started as a separate step (intended to be started and cleaned up
- *    in useEffect)
- *  - Refresh() function will check for differences in the request data, and if it
- *    changes, then a different cache item is requested. (intended to be triggered
- *    during React render)
- */
-/*
-export class CacheItemHandle {
-    cache: CacheTable
-    currentCacheItem: CacheItem
+interface FunctionCacheOptions {
+    items?: 'default'
+    handlers?: 'default'
+}
 
-    // Listener fields
-    updateStream: Stream
-    currentDataListener: Stream
-    currentStatusListener: Stream
+export class FunctionCache {
+    items: CacheTable
+    handlers: HandlerTable
 
-    constructor(cache: Table<CacheItem>) {
-        this.cache = cache;
+    constructor(options: FunctionCacheOptions = {}) {
+
+        let itemSchema = compileSchema({
+            name: 'CacheItems',
+            attrs: [
+                'input_key','id auto'
+            ],
+            funcs: [
+                'get(id)',
+                'get(input_key)',
+                'delete(input_key)',
+                'each',
+            ]
+        });
+
+        this.items = itemSchema.createTable();
+
+        let handlerSchema = compileSchema({
+            name: 'CacheHandlers',
+            attrs: [
+                'id auto',
+                'name'
+            ],
+            funcs: [
+                'get(id)',
+                'get(name)',
+                'get(scope)',
+                'each',
+            ]
+        })
+
+        this.handlers = handlerSchema.createTable();
+
+        if (VerboseLogCacheActivity)
+            console.log('created a new FunctionCache', this);
     }
 
-    startListening() {
-        if (this.updateStream)
-            return;
-
-        this.updateStream = new Stream();
-        this._startListeningToCurrentItem();
-    }
-
-    isListening() {
-        return this.updateStream != null;
-    }
-
-    refresh(req: CacheRequest) {
-        if (VeryVerboseLogCacheActivity) {
-            console.log('Cache refresh for: ', req);
-        }
-
-        const cacheItem = getCacheItem(this.cache, req);
-
-        if (this.currentCacheItem && (this.currentCacheItem.id == cacheItem.id)) {
-            if (VeryVerboseLogCacheActivity)
-                console.log('No change on refresh for: ', { req, current: this.currentCacheItem, latest: cacheItem });
-            return;
-        }
+    /**
+     * Fetch a cache item using the request.
+     *
+     * May return an existing item if one exists.
+     */
+    getItem(params: RequestParams) {
+        const input_key = formatItem(params);
 
         if (VeryVerboseLogCacheActivity)
-            console.log('Cache item has changed on refresh for: ', req);
+            console.log('FunctionCache.getItem is looking for: ' + input_key);
 
-        if (this.isListening()) {
-            this._stopListeningToCurrentItem();
+        let foundEntry = this.items.get_with_input_key(input_key);
+
+        if (foundEntry && foundEntry.expire_at) {
+            if (foundEntry.expire_at < Date.now()) {
+                // Existing value has expired, delete it.
+                this.items.delete_with_input_key(input_key);
+                foundEntry = null;
+
+                if (VeryVerboseLogCacheActivity)
+                    console.log('FunctionCache.getItem noticed that an existing item was expired for: ' + input_key);
+            }
         }
 
-        this.currentCacheItem = cacheItem;
+        if (foundEntry) {
 
-        if (this.isListening()) {
-            this._startListeningToCurrentItem();
-            this.updateStream.receive({ t: 'item', item: {} });
+            if (VeryVerboseLogCacheActivity)
+                console.log('FunctionCache.getItem found an existing valid entry: ' + input_key, { foundEntry });
+
+            // Found a valid existing result.
+            return foundEntry;
+        }
+
+        // Need to create a new cache item
+        const item: CacheItem = {
+            input_key,
+            cached_at: Date.now(),
+            expire_at: 0,
+            params,
+            live_ref_count: 0,
+            result_stream: null,
+            listeners: [],
+            received_events: [],
+        }
+
+        if (VerboseLogCacheActivity)
+            console.log('FunctionCache a new cache item: ' + item.input_key, item);
+
+        this.items.insert(item);
+
+        // Perform the request and listen to the output.
+        this.refreshItem(item);
+
+        return item;
+    }
+
+    setHandler(name: string, callback: (params: RequestParams) => any) {
+        this.handlers.insert({ name, callback });
+    }
+
+    setCatchallHandler(callback: (params: RequestParams) => any) {
+        const existing = this.handlers.get_with_scope('*');
+        if (existing)
+            throw new Error("cache already has a catch-all handler");
+
+        this.handlers.insert({ scope: '*', callback });
+    }
+
+    findHandler(params: RequestParams): HandlerItem {
+        if (params?.func) {
+            const found = this.handlers.get_with_name(params.func);
+            if (found)
+                return found;
+        }
+
+        const catchall = this.handlers.get_with_scope('*');
+        if (catchall)
+            return catchall;
+
+        return null;
+    }
+
+    refreshItem(item: CacheItem) {
+        if (item.result_stream) {
+            item.result_stream.closeByDownstream();
+            item.result_stream = null;
+        }
+
+        const result_stream = new Stream();
+        result_stream.setDownstreamMetadata({ name: 'FunctionCache calling refreshItem' });
+
+        const received_events: StreamEvent[] = [];
+
+        item.result_stream = result_stream;
+        item.received_events = received_events;
+
+        item.result_stream.sendTo({
+            receive(evt) {
+                received_events.push(evt);
+                let anyClosed = false;
+
+                for (const listener of item.listeners) {
+                    if (listener.isClosed()) {
+                        anyClosed = true;
+                        continue;
+                    }
+
+                    listener.receive(evt);
+
+                    if (listener.isClosed())
+                        anyClosed = true;
+                }
+
+                if (anyClosed) {
+                    cacheItemFilterClosedStreams(item);
+                }
+            }
+        });
+
+        for (const listener of item.listeners)
+            listener.receive({ t: c_restart });
+
+        const handler = this.findHandler(item.params);
+        if (!handler)
+            throw new Error("no handler found for: " + item.input_key)
+
+        callbackToStream(() => handler.callback(item.params), item.result_stream)
+    }
+
+    invalidateItem(item: CacheItem) {
+        console.error('fixme: invalidateItem')
+    }
+
+    invalidateWithFilter(filter: (item: CacheItem) => boolean) {
+        for (const item of this.items.each()) {
+            if (filter(item)) {
+                this.invalidateItem(item);
+            }
         }
     }
 
-    close() {
-        this._stopListeningToCurrentItem();
-        this.updateStream.done();
-        this.updateStream = null;
+    listen(params: RequestParams, once?: boolean) {
+        const item = this.getItem(params);
+
+        return this.listenToItem(item, once);
     }
 
-    _stopListeningToCurrentItem() {
-        if (this.currentCacheItem) {
-            stopUsingCacheItem(this.cache, this.currentCacheItem);
-            this.currentDataListener.closeByDownstream();
-            this.currentDataListener = null;
-            this.currentStatusListener.closeByDownstream();
-            this.currentStatusListener = null;
-            this.currentCacheItem = null;
+    listenToItem(item: CacheItem, once?: boolean) {
+        const stream = new Stream();
+
+        stream.setUpstreamMetadata({ name: 'FunctionCache listenToItem' });
+
+        if (once) {
+            stream.upstreamData = stream.upstreamData || {}
+            stream.upstreamData.autoClose = true;
         }
+
+        // Catch up
+        for (const event of item.received_events) {
+            stream.receive(event);
+        }
+
+        item.listeners.push(stream);
+
+        return stream;
     }
 
-    _startListeningToCurrentItem() {
-        startUsingCacheItem(this.cache, this.currentCacheItem);
-        this.currentDataListener = this.currentCacheItem.data.listen();
-        this.currentDataListener.sendTo(this.updateStream);
-        this.currentStatusListener = this.currentCacheItem.data.status.listen();
-        this.currentStatusListener.sendTo(this.updateStream);
+    listenOnce(params: RequestParams) {
+        const stream = new Stream();
+        stream.setUpstreamMetadata({ name: 'FunctionCache listenOnce' });
+
+        const item = this.getItem(params);
+
+        for (const event of item.received_events) {
+            stream.receive(event);
+        }
+
+        item.listeners.push({stream, stayOpen:true});
+
+        return stream;
+    }
+
+    incRef(item: CacheItem) {
+        startUsingCacheItem(this.items, item);
+    }
+
+    decRef(item: CacheItem) {
+        stopUsingCacheItem(this.items, item);
+    }
+
+    newHandle() {
+        return new CacheItemHandle(this);
     }
 }
-*/

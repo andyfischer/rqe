@@ -1,13 +1,11 @@
 
 import { Graph } from '../graph'
-import { Query } from '../query'
+import { Query, QueryLike, QueryParameters } from '../query'
 import { Stream, c_comment } from '../Stream'
-
-type QueryParameters = Map<string,any>
 
 export interface Args {
     graph: Graph
-    query: Query
+    withQuery: Query
     input: Stream
     output: Stream
     queryParameters: QueryParameters
@@ -19,12 +17,14 @@ export class Task {
     input: Stream
     output: Stream
 
-    query: Query
+    withQuery: Query
     queryParameters: QueryParameters
+
+    t = 'task'
 
     constructor(args: Args) {
         this.graph = args.graph;
-        this.query = args.query;
+        this.withQuery = args.withQuery;
         this.queryParameters = args.queryParameters;
         this.input = args.input;
         this.output = args.output;
@@ -32,11 +32,11 @@ export class Task {
 
     // Query accessors
     hasAttr(attr: string) {
-        return this.query.hasAttr(attr);
+        return this.withQuery.hasAttr(attr);
     }
 
     hasValue(attr: string) {
-        const tag = this.query.getAttr(attr);
+        const tag = this.withQuery.getAttr(attr);
         if (!tag)
             return false;
 
@@ -44,14 +44,19 @@ export class Task {
     }
 
     getValue(attr: string) {
-        const tag = this.query.getAttr(attr);
-        if (!tag)
+        const tag = this.withQuery.getAttr(attr);
+        if (!tag) {
             return null;
+        }
 
         if (this.queryParameters.has(attr))
             return this.queryParameters.get(attr);
 
         return tag.value;
+    }
+
+    query(queryLike: QueryLike, params?: QueryParameters): Stream<any> {
+        return this.graph.query(queryLike, params);
     }
 
     put(item: any) {

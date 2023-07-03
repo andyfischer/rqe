@@ -4,12 +4,12 @@
 
 ## Stream.done() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
 done(): void;
 ```
-<b>Returns:</b>
+**Returns:**
 
 void
 

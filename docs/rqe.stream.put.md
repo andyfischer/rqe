@@ -4,19 +4,19 @@
 
 ## Stream.put() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-put(item: Item): void;
+put(item: ItemType): void;
 ```
 
 ## Parameters
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  item | Item |  |
+|  item | ItemType |  |
 
-<b>Returns:</b>
+**Returns:**
 
 void
 

@@ -2,82 +2,45 @@
 
 [Home](./index.md) &gt; [rqe](./rqe.md) &gt; [Table](./rqe.table.md)
 
-## Table class
+## Table interface
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-export declare class Table<ItemType = any> 
+export declare interface Table<ItemType = any> 
 ```
-
-## Constructors
-
-|  Constructor | Modifiers | Description |
-|  --- | --- | --- |
-|  [(constructor)(looseSchema, setupOptions)](./rqe.table._constructor_.md) |  | Constructs a new instance of the <code>Table</code> class |
 
 ## Properties
 
 |  Property | Modifiers | Type | Description |
 |  --- | --- | --- | --- |
-|  [\_errors](./rqe.table._errors.md) |  | [Table](./rqe.table.md)<!-- -->&lt;ErrorItem&gt; |  |
-|  [constraints](./rqe.table.constraints.md) |  | Constraint&lt;ItemType&gt;\[\] |  |
-|  [generatedValues](./rqe.table.generatedvalues.md) |  | GeneratedValue\[\] |  |
-|  [indexes](./rqe.table.indexes.md) |  | TableIndex&lt;ItemType&gt;\[\] |  |
-|  [indexesBySingleAttr](./rqe.table.indexesbysingleattr.md) |  | Map&lt;string, TableIndex&lt;ItemType&gt;&gt; |  |
-|  [itemChangeListeners?](./rqe.table.itemchangelisteners.md) |  | ItemChangeListener\[\] | <i>(Optional)</i> |
-|  [items](./rqe.table.items.md) |  | Map&lt;number, ItemType&gt; |  |
-|  [name](./rqe.table.name.md) |  | string |  |
-|  [nextInternalID](./rqe.table.nextinternalid.md) |  | IDSourceNumber |  |
-|  [primaryUniqueAttr?](./rqe.table.primaryuniqueattr.md) |  | string | <i>(Optional)</i> |
-|  [references](./rqe.table.references.md) |  | Reference\[\] |  |
-|  [schema](./rqe.table.schema.md) |  | TableSchema |  |
-|  [tableId](./rqe.table.tableid.md) |  | string |  |
+|  [attrData](./rqe.table.attrdata.md) |  | Map&lt;string, any&gt; |  |
+|  [indexes](./rqe.table.indexes.md) |  | Map&lt;string, TableIndex&gt; |  |
+|  [indexType](./rqe.table.indextype.md) |  | TableIndexType |  |
+|  [items](./rqe.table.items.md) |  | any |  |
+|  [listenerStreams?](./rqe.table.listenerstreams.md) |  | [Stream](./rqe.stream.md)<!-- -->\[\] | _(Optional)_ |
+|  [schema](./rqe.table.schema.md) |  | Schema |  |
+|  [status?](./rqe.table.status.md) |  | [Table](./rqe.table.md)<!-- -->&lt;StatusTableItem&gt; | _(Optional)_ |
 
 ## Methods
 
-|  Method | Modifiers | Description |
-|  --- | --- | --- |
-|  [\_addIndex(attrs)](./rqe.table._addindex.md) |  |  |
-|  [\_beforePut(item)](./rqe.table._beforeput.md) |  |  |
-|  [\_deleteOne(item, changeInfo)](./rqe.table._deleteone.md) |  |  |
-|  [\_newIndex(config)](./rqe.table._newindex.md) |  |  |
-|  [\[Symbol.iterator\]()](./rqe.table._symbol.iterator_.md) |  |  |
-|  [addChangeListener(listener)](./rqe.table.addchangelistener.md) |  |  |
-|  [addForeignKey(attr, table, foreignAttr, onDelete)](./rqe.table.addforeignkey.md) |  |  |
-|  [addIndex(attrs)](./rqe.table.addindex.md) |  |  |
-|  [addReference(attr, onDelete)](./rqe.table.addreference.md) |  |  |
-|  [addUniqueConstraint(attrs, onConflict)](./rqe.table.adduniqueconstraint.md) |  |  |
-|  [column(attr)](./rqe.table.column.md) |  |  |
-|  [columnList(attr)](./rqe.table.columnlist.md) |  |  |
-|  [count()](./rqe.table.count.md) |  |  |
-|  [delete(where, changeInfo)](./rqe.table.delete.md) |  |  |
-|  [deleteAll()](./rqe.table.deleteall.md) |  |  |
-|  [errors()](./rqe.table.errors.md) |  |  |
-|  [errorsToException()](./rqe.table.errorstoexception.md) |  |  |
-|  [export()](./rqe.table.export.md) |  |  |
-|  [findIndex(attrSet)](./rqe.table.findindex.md) |  |  |
-|  [getEffectiveAttrs()](./rqe.table.geteffectiveattrs.md) |  |  |
-|  [getOne(where)](./rqe.table.getone.md) |  |  |
-|  [getOneByAttrValue(attr, value)](./rqe.table.getonebyattrvalue.md) |  |  |
-|  [hasError()](./rqe.table.haserror.md) |  |  |
-|  [hasIndexForAttrs(attrs)](./rqe.table.hasindexforattrs.md) |  |  |
-|  [internalValidate()](./rqe.table.internalvalidate.md) |  |  |
-|  [itemToKey(item)](./rqe.table.itemtokey.md) |  |  |
-|  [list()](./rqe.table.list.md) |  |  |
-|  [listWhere(where)](./rqe.table.listwhere.md) |  |  |
-|  [one(where)](./rqe.table.one.md) |  |  |
-|  [prepare(newValue)](./rqe.table.prepare.md) |  |  |
-|  [put(newItem, putInfo)](./rqe.table.put.md) |  |  |
-|  [putError(item)](./rqe.table.puterror.md) |  |  |
-|  [putItems(items)](./rqe.table.putitems.md) |  |  |
-|  [query(queryLike, parameters, context)](./rqe.table.query.md) |  |  |
-|  [scan()](./rqe.table.scan.md) |  |  |
-|  [scanWhere(where)](./rqe.table.scanwhere.md) |  |  |
-|  [size()](./rqe.table.size.md) |  |  |
-|  [str()](./rqe.table.str.md) |  |  |
-|  [strs()](./rqe.table.strs.md) |  |  |
-|  [throwErrors()](./rqe.table.throwerrors.md) |  |  |
-|  [usageError(message)](./rqe.table.usageerror.md) |  |  |
-|  [where(where)](./rqe.table.where.md) |  |  |
+|  Method | Description |
+|  --- | --- |
+|  [checkInvariants()](./rqe.table.checkinvariants.md) |  |
+|  [consoleLog()?](./rqe.table.consolelog.md) | _(Optional)_ |
+|  [diff(compare)?](./rqe.table.diff.md) | _(Optional)_ |
+|  [each()?](./rqe.table.each.md) | _(Optional)_ |
+|  [eachWithFilter(condition)?](./rqe.table.eachwithfilter.md) | _(Optional)_ |
+|  [get()?](./rqe.table.get.md) | _(Optional)_ |
+|  [hasError()?](./rqe.table.haserror.md) | _(Optional)_ |
+|  [insert(item)](./rqe.table.insert.md) |  |
+|  [isLoading()?](./rqe.table.isloading.md) | _(Optional)_ |
+|  [item\_matches\_uniqueKey(item, uniqueKey)?](./rqe.table.item_matches_uniquekey.md) | _(Optional)_ |
+|  [item\_to\_uniqueKey(item)?](./rqe.table.item_to_uniquekey.md) | _(Optional)_ |
+|  [listAll()?](./rqe.table.listall.md) | _(Optional)_ |
+|  [listen()?](./rqe.table.listen.md) | _(Optional)_ |
+|  [listenToStream(stream, callbacks)?](./rqe.table.listentostream.md) | _(Optional)_ |
+|  [set(item)?](./rqe.table.set.md) | _(Optional)_ |
+|  [supportsFunc(funcName)](./rqe.table.supportsfunc.md) |  |
+|  [waitForData()?](./rqe.table.waitfordata.md) | _(Optional)_ |
 

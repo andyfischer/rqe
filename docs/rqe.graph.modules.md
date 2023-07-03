@@ -4,8 +4,8 @@
 
 ## Graph.modules property
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-modules: Module[];
+modules: Table<GraphModule>;
 ```

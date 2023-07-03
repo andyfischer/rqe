@@ -4,19 +4,19 @@
 
 ## Stream.fromList() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-static fromList(items: Item[]): Stream;
+static fromList<ItemType = any>(items: ItemType[]): Stream<ItemType>;
 ```
 
 ## Parameters
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  items | Item\[\] |  |
+|  items | ItemType\[\] |  |
 
-<b>Returns:</b>
+**Returns:**
 
-[Stream](./rqe.stream.md)
+[Stream](./rqe.stream.md)<!-- -->&lt;ItemType&gt;
 

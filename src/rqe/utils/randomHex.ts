@@ -9,9 +9,8 @@ function randInt(max: number) {
 export function randomHex(length: number) {
     let out = '';
 
-    length--;
-
     out += hexAlpha[randInt(hexAlpha.length)];
+    length--;
 
     while (length > 0) {
         out += hexAlphanumeric[randInt(hexAlphanumeric.length)];

@@ -4,12 +4,12 @@
 
 ## Stream.\[Symbol.asyncIterator\]() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-[Symbol.asyncIterator](): AsyncGenerator<any, void, unknown>;
+[Symbol.asyncIterator](): AsyncIterableIterator<ItemType>;
 ```
-<b>Returns:</b>
+**Returns:**
 
-AsyncGenerator&lt;any, void, unknown&gt;
+AsyncIterableIterator&lt;ItemType&gt;
 

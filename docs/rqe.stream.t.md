@@ -4,7 +4,7 @@
 
 ## Stream.t property
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
 t: string;

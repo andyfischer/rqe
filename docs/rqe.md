@@ -10,11 +10,16 @@
 |  --- | --- |
 |  [Graph](./rqe.graph.md) |  |
 |  [Stream](./rqe.stream.md) |  |
-|  [Table](./rqe.table.md) |  |
 
 ## Functions
 
 |  Function | Description |
 |  --- | --- |
-|  [newGraph()](./rqe.newgraph.md) |  |
+|  [streamToCsvFile(input, options, filename)](./rqe.streamtocsvfile.md) |  |
+
+## Interfaces
+
+|  Interface | Description |
+|  --- | --- |
+|  [Table](./rqe.table.md) |  |
 

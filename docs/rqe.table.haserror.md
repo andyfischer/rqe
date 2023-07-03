@@ -4,12 +4,12 @@
 
 ## Table.hasError() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-hasError(): boolean;
+hasError?(): boolean;
 ```
-<b>Returns:</b>
+**Returns:**
 
 boolean
 

@@ -4,12 +4,12 @@
 
 ## Stream.\[Symbol.iterator\]() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-[Symbol.iterator](): Generator<any, void, unknown>;
+[Symbol.iterator](): Generator<ItemType, void, undefined>;
 ```
-<b>Returns:</b>
+**Returns:**
 
-Generator&lt;any, void, unknown&gt;
+Generator&lt;ItemType, void, undefined&gt;
 

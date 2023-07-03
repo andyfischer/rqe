@@ -3,7 +3,7 @@ export type QueryNode = MultistepQuery | Query | QueryTag
 export type TagValue = string | QueryNode | null
 
 export class MultistepQuery {
-    t = 'multistep'
+    t: 'multistep' = 'multistep'
     steps: Query[]
 
     constructor(steps: Query[]) {
@@ -12,7 +12,7 @@ export class MultistepQuery {
 }
 
 export class Query {
-    t = 'query'
+    t: 'query' = 'query'
     tags: QueryTag[]
     tagsByAttr: Map<string, QueryTag>
 
@@ -42,6 +42,10 @@ export class Query {
         return this.tagsByAttr.get(attr);
     }
 
+    getPositionalAttr(index: number) {
+        return this.tags[index]?.attr;
+    }
+
     toQueryString() {
         const out = [];
 
@@ -52,6 +56,15 @@ export class Query {
         return out.join(' ');
     }
 
+    toItemValue() {
+        const item: any = {};
+        for (const tag of this.tags) {
+            item[tag.attr] = tag.value;
+        }
+
+        return item;
+    }
+
     _refresh() {
         this.tagsByAttr = new Map<string, QueryTag>()
         for (const tag of this.tags)
@@ -60,7 +73,7 @@ export class Query {
 }
 
 export class QueryTag {
-    t = 'tag'
+    t: 'tag' = 'tag'
     attr: string
     value: TagValue
     isValueOptional: boolean

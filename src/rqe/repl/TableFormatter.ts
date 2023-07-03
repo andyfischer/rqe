@@ -148,7 +148,7 @@ export function formatTable(table: Table): string[] {
     let out = [];
 
     const formatState = newTableFormatState();
-    const formatted = formatItems(formatState, table.scan());
+    const formatted = formatItems(formatState, table.each());
     updateStateForItems(formatState, formatted);
     const header = formatHeader(formatState);
     header.print(s => out.push(s));

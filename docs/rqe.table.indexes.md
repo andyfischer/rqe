@@ -4,8 +4,8 @@
 
 ## Table.indexes property
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-indexes: TableIndex<ItemType>[];
+indexes: Map<string, TableIndex>;
 ```

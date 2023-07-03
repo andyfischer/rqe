@@ -1,4 +1,5 @@
 
 export { CacheItemHandle } from './CacheItemHandle'
-export { getCacheItem, startUsingCacheItem, stopUsingCacheItem, CacheRequest, CacheItem, getRequestCacheSchema,
-    invalidateCacheItemsOnCondition } from './FunctionCache'
+export { startUsingCacheItem, stopUsingCacheItem, getRequestCacheSchema, FunctionCache } from './FunctionCache'
+
+export type { CacheItem } from './FunctionCache'

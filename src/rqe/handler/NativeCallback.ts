@@ -85,7 +85,6 @@ export function callbackToStream(callback: Function, stream: Stream) {
         output = callback();
 
     } catch (e) {
-
         if (stream.closedByUpstream) {
             recordUnhandledException(e);
             return;
@@ -114,7 +113,18 @@ export function declaredFunctionToHandler(decl: string, callback: Function) {
         const stream = new Stream();
 
         callbackToStream(() => {
-            const args = params.map(param => task.getValue(param));
+            // Find the args mentioned by the declaration and extract them into
+            // a list to send to the callback.
+            const args = params.map(param => {
+                if (task.hasValue(param))
+                    return task.getValue(param);
+
+                // Check if this is an implicit param.
+                if (param === 'task')
+                    return task;
+
+                return null;
+            });
             return callback(...args);
         }, stream);
 

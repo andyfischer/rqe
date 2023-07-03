@@ -4,8 +4,8 @@
 
 ## Graph.tables property
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-tables: Map<string, Table<any>>;
+tables: Table<GraphTable>;
 ```

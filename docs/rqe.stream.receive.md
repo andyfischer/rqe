@@ -4,19 +4,19 @@
 
 ## Stream.receive() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-receive(data: PipedData): void;
+receive(event: StreamEvent): void;
 ```
 
 ## Parameters
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  data | PipedData |  |
+|  event | StreamEvent |  |
 
-<b>Returns:</b>
+**Returns:**
 
 void
 

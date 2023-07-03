@@ -4,8 +4,8 @@
 
 ## Table.schema property
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-schema: TableSchema;
+schema: Schema;
 ```

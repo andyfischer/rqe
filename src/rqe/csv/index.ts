@@ -1,2 +1,3 @@
 
-export { streamToCsv, Options } from './streamToCsv'
+export { streamToCsv } from './streamToCsv'
+export type { Options } from './streamToCsv'

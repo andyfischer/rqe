@@ -4,8 +4,8 @@
 
 ## Table.items property
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-items: Map<number, ItemType>;
+items: any;
 ```

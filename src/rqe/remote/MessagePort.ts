@@ -52,7 +52,7 @@ interface SetupOptions<OutgoingRequestType,IncomingRequestType> {
     handleRequest?: (req: IncomingRequestType, connection: ConnectionState<OutgoingRequestType>, output: Stream) => void
 }
 
-export class MessagePortConnection<OutgoingRequestType, IncomingRequestType> implements RequestClient<OutgoingRequestType> {
+export class MessagePort<OutgoingRequestType, IncomingRequestType> implements RequestClient<OutgoingRequestType> {
     port: Port
     options: SetupOptions<OutgoingRequestType,IncomingRequestType>
     serverStreams = new ActiveStreamSet()

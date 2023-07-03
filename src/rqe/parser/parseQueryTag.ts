@@ -26,10 +26,11 @@ export function parseQueryTagFromTokens(it: TokenIterator): QueryTag {
         return result;
     }
 
+    */
+
     if (it.tryConsume(t_dollar)) {
-        const unboundVar = it.consumeAsUnquotedText();
-        result.attr = unboundVar;
-        result.identifier = unboundVar;
+        const attr = it.consumeAsUnquotedText();
+        result.attr = attr;
         result.isParameter = true;
 
         if (it.tryConsume(t_question)) {
@@ -37,7 +38,6 @@ export function parseQueryTagFromTokens(it: TokenIterator): QueryTag {
         }
         return result;
     }
-    */
 
     // Attribute
     result.attr = it.consumeAsUnquotedText();

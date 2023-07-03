@@ -1,18 +1,21 @@
 {
   "name": "rqe",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p .",
     "prepare": "tsc -p .",
-    "generate-docs": "mkdir -p dist/api-extractor && api-extractor run --local && api-documenter markdown -i temp -o docs/api && mv docs/api/* docs"
+    "generate-docs": "ts-node src.publish/generateDocs.ts"
   },
   "author": "andyfischer",
   "license": "Unlicense",
   "devDependencies": {
+    "@microsoft/api-documenter": "^7.22.21",
+    "@microsoft/api-extractor": "^7.36.0",
     "@types/node": "^18.16.3",
+    "ts-node": "^10.9.1",
     "typescript": "^4.5.2"
   }
 }

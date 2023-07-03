@@ -4,57 +4,68 @@
 
 ## Stream class
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-export declare class Stream 
+export declare class Stream<ItemType = any> implements StreamReceiver 
 ```
-
-## Constructors
-
-|  Constructor | Modifiers | Description |
-|  --- | --- | --- |
-|  [(constructor)(label)](./rqe.stream._constructor_.md) |  | Constructs a new instance of the <code>Stream</code> class |
+**Implements:** StreamReceiver
 
 ## Properties
 
 |  Property | Modifiers | Type | Description |
 |  --- | --- | --- | --- |
-|  [\_backlog](./rqe.stream._backlog.md) |  | PipedData\[\] |  |
-|  [\_backpressureStop](./rqe.stream._backpressurestop.md) |  | boolean |  |
-|  [downstream](./rqe.stream.downstream.md) |  | PipeReceiver |  |
-|  [id](./rqe.stream.id.md) |  | number |  |
-|  [label?](./rqe.stream.label.md) |  | string | <i>(Optional)</i> |
-|  [receivedDone](./rqe.stream.receiveddone.md) |  | boolean |  |
+|  [backlog](./rqe.stream.backlog.md) |  | StreamEvent\[\] |  |
+|  [closedByDownstream](./rqe.stream.closedbydownstream.md) |  | boolean |  |
+|  [closedByUpstream](./rqe.stream.closedbyupstream.md) |  | boolean |  |
+|  [downstreamMetadata?](./rqe.stream.downstreammetadata.md) |  | { name: string; } | _(Optional)_ |
+|  [globalId](./rqe.stream.globalid.md) |  | number |  |
+|  [receiver](./rqe.stream.receiver.md) |  | StreamReceiver |  |
 |  [t](./rqe.stream.t.md) |  | string |  |
+|  [upstreamData?](./rqe.stream.upstreamdata.md) |  | any | _(Optional)_ |
+|  [upstreamMetadata?](./rqe.stream.upstreammetadata.md) |  | { name: string; } | _(Optional)_ |
 
 ## Methods
 
 |  Method | Modifiers | Description |
 |  --- | --- | --- |
+|  [\_sendToReceiver(event)](./rqe.stream._sendtoreceiver.md) |  |  |
 |  [\[Symbol.asyncIterator\]()](./rqe.stream._symbol.asynciterator_.md) |  |  |
 |  [\[Symbol.iterator\]()](./rqe.stream._symbol.iterator_.md) |  |  |
-|  [aggregate(receiver, callback)](./rqe.stream.aggregate.md) |  |  |
-|  [callback(callback)](./rqe.stream.callback.md) |  |  |
-|  [closeWithError(message)](./rqe.stream.closewitherror.md) |  |  |
-|  [closeWithUnhandledError(e)](./rqe.stream.closewithunhandlederror.md) |  |  |
+|  [close()](./rqe.stream.close.md) |  |  |
+|  [closeByDownstream()](./rqe.stream.closebydownstream.md) |  |  |
+|  [closeWithError(error)](./rqe.stream.closewitherror.md) |  |  |
+|  [closeWithException(err, context)](./rqe.stream.closewithexception.md) |  |  |
+|  [collectEvents(callback)](./rqe.stream.collectevents.md) |  |  |
+|  [collectEventsSync()](./rqe.stream.collecteventssync.md) |  |  |
+|  [collectItemsSync()](./rqe.stream.collectitemssync.md) |  |  |
+|  [collectOneItemSync()](./rqe.stream.collectoneitemsync.md) |  |  |
+|  [comment(message, level, details)](./rqe.stream.comment.md) |  |  |
 |  [done()](./rqe.stream.done.md) |  |  |
+|  [finish()](./rqe.stream.finish.md) |  |  |
 |  [fromList(items)](./rqe.stream.fromlist.md) | <code>static</code> |  |
-|  [isDone()](./rqe.stream.isdone.md) |  |  |
+|  [getDebugLabel()](./rqe.stream.getdebuglabel.md) |  |  |
+|  [hasDownstream()](./rqe.stream.hasdownstream.md) |  |  |
+|  [isClosed()](./rqe.stream.isclosed.md) |  |  |
+|  [isStream()](./rqe.stream.isstream.md) |  |  |
 |  [newEmptyStream()](./rqe.stream.newemptystream.md) | <code>static</code> |  |
-|  [newStreamToReceiver(receiver)](./rqe.stream.newstreamtoreceiver.md) | <code>static</code> |  |
+|  [promiseEvents()](./rqe.stream.promiseevents.md) |  |  |
+|  [promiseItems()](./rqe.stream.promiseitems.md) |  |  |
+|  [promiseOneItem()](./rqe.stream.promiseoneitem.md) |  |  |
 |  [put(item)](./rqe.stream.put.md) |  |  |
-|  [putError(item)](./rqe.stream.puterror.md) |  |  |
-|  [putHeader(item)](./rqe.stream.putheader.md) |  |  |
-|  [putTableItems(table)](./rqe.stream.puttableitems.md) |  |  |
-|  [receive(data)](./rqe.stream.receive.md) |  |  |
-|  [sendDoneIfNeeded()](./rqe.stream.senddoneifneeded.md) |  |  |
-|  [sendError(type, data)](./rqe.stream.senderror.md) |  |  |
+|  [putDone()](./rqe.stream.putdone.md) |  |  |
+|  [putError(error)](./rqe.stream.puterror.md) |  |  |
+|  [putException(err, context)](./rqe.stream.putexception.md) |  |  |
+|  [putRelated(item)](./rqe.stream.putrelated.md) |  |  |
+|  [putRestart()](./rqe.stream.putrestart.md) |  |  |
+|  [receive(event)](./rqe.stream.receive.md) |  |  |
 |  [sendTo(receiver)](./rqe.stream.sendto.md) |  |  |
-|  [sendUnhandledError(error)](./rqe.stream.sendunhandlederror.md) |  |  |
-|  [setBackpressureStop()](./rqe.stream.setbackpressurestop.md) |  |  |
-|  [sync(opts)](./rqe.stream.sync.md) |  |  |
-|  [take()](./rqe.stream.take.md) |  |  |
-|  [then(onResolve, onReject)](./rqe.stream.then.md) |  |  |
-|  [transform(receiver, callback)](./rqe.stream.transform.md) |  |  |
+|  [setDownstreamMetadata(data)](./rqe.stream.setdownstreammetadata.md) |  |  |
+|  [setUpstreamMetadata(data)](./rqe.stream.setupstreammetadata.md) |  |  |
+|  [spyEvents(callback)](./rqe.stream.spyevents.md) |  |  |
+|  [spyItems(callback)](./rqe.stream.spyitems.md) |  |  |
+|  [takeBacklog()](./rqe.stream.takebacklog.md) |  |  |
+|  [transform(callback)](./rqe.stream.transform.md) |  |  |
+|  [wait()](./rqe.stream.wait.md) |  |  |
+|  [watchItems(callback)](./rqe.stream.watchitems.md) |  |  |
 

@@ -4,10 +4,10 @@
 
 ## Graph.query() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-query(queryLike: QueryLike, parameters?: any, context?: QueryExecutionContext): Stream;
+query(queryLike: QueryLike, params?: QueryParameters): Stream;
 ```
 
 ## Parameters
@@ -15,10 +15,9 @@ query(queryLike: QueryLike, parameters?: any, context?: QueryExecutionContext): 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
 |  queryLike | QueryLike |  |
-|  parameters | any |  |
-|  context | QueryExecutionContext |  |
+|  params | QueryParameters | _(Optional)_ |
 
-<b>Returns:</b>
+**Returns:**
 
 [Stream](./rqe.stream.md)
 

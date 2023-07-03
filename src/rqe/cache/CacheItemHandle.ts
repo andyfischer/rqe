@@ -1,12 +1,13 @@
-import { Stream } from "../Stream";
+import { Stream, c_close } from "../Stream";
 import { Table } from '../table'
-import { CacheRequest, CacheItem, getCacheItem, startUsingCacheItem, stopUsingCacheItem, CacheTable } from "./FunctionCache";
+import { CacheItem, startUsingCacheItem, stopUsingCacheItem, CacheTable } from "./FunctionCache";
 import { VeryVerboseLogCacheActivity } from '../config'
+import { FunctionCache } from './FunctionCache'
 
 /*
  * Helper object to manage usage of a cache-based value.
  *
- * This is optimized for use in a React hook.
+ * Notes: This object is optimized for use as a React hook.
  *
  * Responsibilities:
  *  - Initial item can be fetched synchronously (intended to be called in useState)
@@ -17,37 +18,34 @@ import { VeryVerboseLogCacheActivity } from '../config'
  *    during React render)
  */
 
+
+type CacheRequest = any
+
 export class CacheItemHandle {
-    cache: CacheTable
+    cache: FunctionCache
     currentCacheItem: CacheItem
+    hasClosed: boolean = false
 
-    // Listener fields
+    // Stream listening to the current cache item.
+    currentCacheItemListener: Stream
+
+    // Stream sent to the handle user, includes any changes. This stream lasts for the lifespan
+    // of the handle.
     updateStream: Stream
-    currentDataListener: Stream
-    currentStatusListener: Stream
 
-    constructor(cache: Table<CacheItem>) {
+    constructor(cache: FunctionCache) {
         this.cache = cache;
     }
 
-    startListening() {
-        if (this.updateStream)
-            return;
-
-        this.updateStream = new Stream();
-        this._startListeningToCurrentItem();
-    }
-
-    isListening() {
-        return this.updateStream != null;
-    }
-
     refresh(req: CacheRequest) {
+        if (this.hasClosed)
+            throw new Error("CacheItemHandle usage error: .refresh called after .close");
+
         if (VeryVerboseLogCacheActivity) {
             console.log('Cache refresh for: ', req);
         }
 
-        const cacheItem = getCacheItem(this.cache, req);
+        const cacheItem = this.cache.getItem(req);
 
         if (this.currentCacheItem && (this.currentCacheItem.id == cacheItem.id)) {
             if (VeryVerboseLogCacheActivity)
@@ -59,38 +57,73 @@ export class CacheItemHandle {
             console.log('Cache item has changed on refresh for: ', req);
 
         if (this.isListening()) {
-            this._stopListeningToCurrentItem();
+            this._closeListener();
         }
 
         this.currentCacheItem = cacheItem;
 
         if (this.isListening()) {
-            this._startListeningToCurrentItem();
-            this.updateStream.receive({ t: 'item', item: {} });
+            this._openListener();
+        }
+    }
+
+    isListening() {
+        return this.updateStream != null;
+    }
+
+    startListening() {
+        if (this.hasClosed)
+            throw new Error("CacheItemHandle usage error: .startListening called after .close");
+
+        if (this.updateStream)
+            // Already listening
+            return this.updateStream;
+
+        this.updateStream = new Stream();
+        this.updateStream.setUpstreamMetadata({ name: 'CacheItemHandle updateStream' });
+
+        this._openListener();
+
+        return this.updateStream;
+    }
+
+    _openListener() {
+        if (this.currentCacheItemListener)
+            throw new Error("CacheItemHandle error: already have a listener in _openListener");
+
+        this.currentCacheItemListener = this.cache.listenToItem(this.currentCacheItem);
+        this.currentCacheItemListener.setDownstreamMetadata({name:"CacheItemHandle listening to currentCacheItem"});
+
+        this.cache.incRef(this.currentCacheItem);
+
+        this.currentCacheItemListener.sendTo(evt => {
+            if (evt.t === c_close) {
+                // Keep the .updateStream open until .close() is called on this handle.
+                return;
+            }
+            this.updateStream.receive(evt);
+        });
+    }
+
+    _closeListener() {
+        if (this.currentCacheItemListener) {
+            this.currentCacheItemListener.closeByDownstream();
+            this.currentCacheItemListener = null;
+
+            this.cache.decRef(this.currentCacheItem);
+
+            this.updateStream.putRestart();
         }
     }
 
     close() {
-        this._stopListeningToCurrentItem();
-        this.updateStream.done();
+        if (this.hasClosed)
+            throw new Error("CacheItemHandle usage error: .close called twice");
+
+        this._closeListener();
+        this.currentCacheItem = null;
+        this.updateStream.close();
         this.updateStream = null;
-    }
-
-    _stopListeningToCurrentItem() {
-        if (this.currentCacheItem) {
-            stopUsingCacheItem(this.cache, this.currentCacheItem);
-            this.currentDataListener.closeByDownstream();
-            this.currentDataListener = null;
-            this.currentStatusListener.closeByDownstream();
-            this.currentStatusListener = null;
-            this.currentCacheItem = null;
-        }
-    }
-
-    _startListeningToCurrentItem() {
-        startUsingCacheItem(this.cache, this.currentCacheItem);
-        this.currentDataListener = new Stream();
-        this.currentDataListener.sendTo(this.updateStream);
     }
 }
 

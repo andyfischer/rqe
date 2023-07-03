@@ -233,7 +233,7 @@ export function parseQueryFromTokens(it: TokenIterator): QueryNode | ParseError 
     return new MultistepQuery(steps);
 }
 
-export function parseQuery(str: string) {
+export function parseQuery(str: string): QueryNode | ParseError {
     try {
         const it = lexStringToIterator(str);
         return parseQueryFromTokens(it);

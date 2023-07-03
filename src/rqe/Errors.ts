@@ -2,7 +2,7 @@
 import { StringIDSource } from './utils/IDSource'
 
 export type ErrorType = 'verb_not_found' | 'unhandled_exception' | 'provider_not_found' | 'missing_parameter'
-    | 'no_table_found' | 'Unimplemented' | 'TableNotFound'
+    | 'no_handler_found' | 'Unimplemented' | 'TableNotFound'
     | 'MissingAttrs' | 'MissingValue' | 'NotSupported' | 'ExtraAttrs'
     | 'http_protocol_error' | string
 

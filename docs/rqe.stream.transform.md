@@ -4,20 +4,19 @@
 
 ## Stream.transform() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-transform(receiver: PipeReceiver, callback: TransformFunc): void;
+transform<OutputType = ItemType>(callback: (item: ItemType) => OutputType): Stream<OutputType>;
 ```
 
 ## Parameters
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  receiver | PipeReceiver |  |
-|  callback | TransformFunc |  |
+|  callback | (item: ItemType) =&gt; OutputType |  |
 
-<b>Returns:</b>
+**Returns:**
 
-void
+[Stream](./rqe.stream.md)<!-- -->&lt;OutputType&gt;
 

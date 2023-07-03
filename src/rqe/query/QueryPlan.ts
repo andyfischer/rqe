@@ -6,7 +6,7 @@ import { Stream } from '../Stream'
 import { findVerbForQuery } from './findVerbForQuery'
 import { Graph } from '../graph'
 // import { Trace } from '../Trace'
-import { findBestPointMatch, errorForNoTableFound } from '../query/FindMatch'
+import { matchHandlerToQuery, errorForNoTableFound, MatchContext } from '../query/FindMatch'
 // import { unwrapTagged } from '../TaggedValue'
 // import { NativeCallback } from '../handler'
 import { Task } from '../task'
@@ -20,7 +20,7 @@ import { formatItem } from '../Format'
 // import { completePlanJoinVerb, JoinPlan } from '../query/Join'
 import { VerboseLogEveryPlanExecution } from '../config'
 import { IndentPrinter } from '../utils/IndentPrinter'
-import { logPlanToConsole } from './logPlanToConsole'
+import { planToDebugString } from './planToDebugString'
 import { JoinPlan } from './Join'
 import { TaskCallback } from '../task/runTaskCallback'
 
@@ -91,6 +91,7 @@ export class Plan {
     // Context
     graph: Graph
     query: Query
+    queryWithoutVerb: Query
     verb: string
     context: QueryExecutionContext
     expectedInput: ExpectedValue
@@ -100,14 +101,15 @@ export class Plan {
     afterVerb: QueryTuple
     point: MountPoint
     */
+    handler: Handler
     expectedOutput: ExpectedValue
 
     // Runtime data:
 
     // Check/prepare inputs
-    checkRequiredParams: string[]
-    overprovidedAttrs: string[]
-    paramsFromQuery: Map<string,any>
+    checkRequiredParams: string[] = []
+    overprovidedAttrs: string[] = []
+    paramsFromQuery = new Map<string,any>()
 
     // Start results
     outputSchema: StreamSchema
@@ -117,10 +119,18 @@ export class Plan {
     joinPlan?: JoinPlan
 
     // Post filter
-    outputFilters: OutputFilter[]
+    outputFilters: OutputFilter[] = []
 
     // Exceptional cases
     knownError?: ErrorItem
+
+    toDebugString() {
+        return planToDebugString({ plan: this });
+    }
+
+    consoleLog() {
+        console.log(this.toDebugString());
+    }
 }
 
 export type OutputFilter = OutputFilterReshape | OutputFilterWhereAttrsEqual
@@ -157,57 +167,52 @@ export type ExecutionType = 'normal' | 'schemaOnly'
 
 export function createPlan(graph: Graph, context: QueryExecutionContext, query: Query, expectedInput: ExpectedValue): Plan {
 
+    const ctx: MatchContext = {};
     //const trace = new Trace();
     query.freeze();
 
     const { verbDef, verbName, afterVerb } = findVerbForQuery(graph, query, expectedInput);
 
-    const plan: Plan = {
-        graph,
-        context,
-        query,
-        expectedInput,
-        verb: verbName || verbDef.name,
-        checkRequiredParams: [],
-        paramsFromQuery: new Map(),
-        overprovidedAttrs: [],
-        outputSchema: null,
-        nativeCallback: null,
-        outputFilters: [],
-        expectedOutput: null,
-    }
+    const plan = new Plan();
+    plan.graph = graph;
+    plan.context = context;
+    plan.query = query;
+    plan.expectedInput = expectedInput;
+    plan.verb = verbName || verbDef.name;
+    plan.queryWithoutVerb = afterVerb;
 
     validatePlan(plan);
 
-    /*
     if (plan.verb === 'get') {
-        // future refactor: findBestPointMatch doesn't need to worry about the overprovided check
-        const match = findBestPointMatch(graph, trace, tuple);
-        const point = match?.point;
-        completePlanGetVerb(plan, point);
+        // future refactor: matchHandlerToQuery doesn't need to worry about the overprovided check
+        const match = matchHandlerToQuery(ctx, graph, query);
+        const handler = match?.handler;
+        completePlanGetVerb(ctx, plan, handler);
     } else if (plan.verb === 'join') {
-        completePlanJoinVerb(plan);
+        throw new Error("implement plan for: join");
+        // completePlanJoinVerb(plan);
     } else if (plan.verb === 'where') {
-        plan.nativeCallback = verbDef.run;
-        plan.expectedOutput = plan.expectedInput;
+        throw new Error("implement plan for: where");
+        //plan.nativeCallback = verbDef.run;
+        //plan.expectedOutput = plan.expectedInput;
     } else {
-        completePlanAltVerb(plan, verbDef);
+        throw new Error("implement plan for alt verb");
+        //completePlanAltVerb(plan, verbDef);
     }
+
     validatePlan(plan);
-    */
 
     return plan;
 }
 
-/*
-function completePlanGetVerb(plan: Plan, point: MountPoint) {
-    if (!point) {
+function completePlanGetVerb(ctx: MatchContext, plan: Plan, handler: Handler) {
+    if (!handler) {
         plan.expectedOutput = { t: 'some_value' };
-        plan.knownError = errorForNoTableFound(plan.graph, plan.trace, plan.tuple);
+        plan.knownError = errorForNoTableFound(ctx, plan.graph, plan.query);
         return plan;
     }
 
-    plan.point = point;
+    plan.handler = handler;
 
     // Check/prepare inputs
     const outputShape: OutputAttr[] = []
@@ -215,28 +220,28 @@ function completePlanGetVerb(plan: Plan, point: MountPoint) {
     let overprovidedFilter: OutputFilterWhereAttrsEqual = null;
 
     // Check each tag requested by query
-    for (const queryTag of plan.tuple.tags) {
+    for (const queryTag of plan.query.tags) {
         const attr = queryTag.attr;
-        const mountTag = point.attrs[attr];
-        const queryProvidesValue = queryTag.value.t !== 'no_value';
-        const queryProvidedValue = queryProvidesValue ? unwrapTagged(queryTag.value) : null;
-        const willHaveValueForThisAttr = queryProvidesValue || queryTag.identifier;
+        const handlerTag = handler.getTag(attr);
+        const queryProvidedValue = queryTag.hasValue() ? queryTag.value : null;
+        // const willHaveValueForThisAttr = queryTag.hasValue() || queryTag.identifier;
 
         let isRequiredParam = false;
-        if (mountTag && mountTag.requiresValue && !queryProvidesValue)
+        if (handlerTag && handlerTag.requiresValue && !queryTag.hasValue())
             isRequiredParam = true;
 
-        if (queryTag.identifier && !queryProvidesValue)
-            isRequiredParam = true;
+        //if (queryTag.identifier && !queryTag.hasValue())
+        //    isRequiredParam = true;
 
         if (isRequiredParam)
             plan.checkRequiredParams.push(attr);
 
-        if (queryProvidesValue)
+        if (queryTag.hasValue())
             plan.paramsFromQuery.set(attr, queryProvidedValue);
 
+        /*
         if (plan.graph.enableOverprovideFilter) {
-            if (willHaveValueForThisAttr && mountTag && (!mountTag.requiresValue && !mountTag.acceptsValue)) {
+            if (willHaveValueForThisAttr && handlerTag && (!handlerTag.requiresValue && !handlerTag.acceptsValue)) {
                 plan.overprovidedAttrs.push(attr);
 
                 if (!overprovidedFilter) {
@@ -244,35 +249,38 @@ function completePlanGetVerb(plan: Plan, point: MountPoint) {
                     plan.outputFilters.push(overprovidedFilter);
                 }
 
-                if (queryProvidesValue)
+                if (queryTag.hasValue())
                     overprovidedFilter.attrs.push({ t: 'constant', attr, value: queryProvidedValue });
                 else
                     overprovidedFilter.attrs.push({ t: 'from_param', attr });
             }
         }
+        */
 
-        if (!mountTag) {
+        if (!handlerTag) {
             // Query has an optional tag and the mount didn't provide it.
-        } else if (queryProvidesValue) {
+        } else if (queryTag.hasValue()) {
             outputShape.push({ t: 'constant', attr, value: queryProvidedValue})
-        } else if (willHaveValueForThisAttr) {
-            outputShape.push({ t: 'from_param', attr });
+        //} else if (willHaveValueForThisAttr) {
+        //    outputShape.push({ t: 'from_param', attr });
         } else {
             outputShape.push({ t: 'from_item', attr });
         }
     }
     validatePlan(plan);
 
-    plan.expectedOutput = { t: 'expected_value', value: plan.afterVerb }
-    plan.outputSchema = plan.afterVerb.toItemValue();
+    // Success
+    plan.expectedOutput = { t: 'expected_value', value: plan.queryWithoutVerb }
+    plan.outputSchema = plan.queryWithoutVerb.toItemValue();
 
-    if (!point.callback)
-        throw new Error("handler doesn't have a callback: " + point.toDeclString());
+    if (!handler.run)
+        throw new Error("handler doesn't have a run() method: " + handler.toDeclString());
 
-    plan.nativeCallback = point.callback;
+    plan.nativeCallback = handler.run;
     validatePlan(plan);
 }
 
+/*
 function completePlanAltVerb(plan: Plan, verb: Verb) {
     plan.nativeCallback = verb.run;
     plan.expectedOutput = getExpectedOutputWithSchemaOnlyExecution(plan);

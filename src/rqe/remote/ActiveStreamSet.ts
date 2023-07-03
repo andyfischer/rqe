@@ -1,5 +1,5 @@
 
-import { Stream, StreamEvent, c_done } from '../Stream'
+import { Stream, StreamEvent, c_close } from '../Stream'
 import { StreamProtocolValidator } from '../validation/StreamProtocolValidator'
 import { recordUnhandledException } from '../Errors'
 
@@ -56,7 +56,7 @@ export class ActiveStreamSet {
 
         this.validators.get(id).check(msg);
 
-        if (msg.t === c_done) {
+        if (msg.t === c_close) {
             this.streams.delete(id);
             this.validators.delete(id);
             this.closedStreamIds.add(id);

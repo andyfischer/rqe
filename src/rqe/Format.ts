@@ -60,8 +60,6 @@ function formatItemAttr(attr: string, value: any) {
         return attr;
 
     switch ((value as TaggedValue).t) {
-    case 'no_value':
-        return attr;
 
     case 'query':
         return `${attr}=(${value.toQueryString()})`;

@@ -4,19 +4,19 @@
 
 ## Stream.sendTo() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-sendTo(receiver: PipeReceiver): void;
+sendTo(receiver: LooseStreamReceiver): void;
 ```
 
 ## Parameters
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  receiver | PipeReceiver |  |
+|  receiver | LooseStreamReceiver |  |
 
-<b>Returns:</b>
+**Returns:**
 
 void
 

@@ -4,19 +4,19 @@
 
 ## Stream.closeWithError() method
 
-<b>Signature:</b>
+**Signature:**
 
 ```typescript
-closeWithError(message: string): void;
+closeWithError(error: ErrorItem): void;
 ```
 
 ## Parameters
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  message | string |  |
+|  error | ErrorItem |  |
 
-<b>Returns:</b>
+**Returns:**
 
 void
 

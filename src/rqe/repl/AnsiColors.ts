@@ -53,6 +53,8 @@ export function ansiRegex({onlyFirst = false} = {}) {
 }
 
 export function stripAnsi(s: string) {
+    if (!s)
+        return s;
     _ansiRegex = _ansiRegex || ansiRegex();
     return s.replace(_ansiRegex, '');
 }

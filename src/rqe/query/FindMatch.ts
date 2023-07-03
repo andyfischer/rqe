@@ -1,9 +1,7 @@
 
 import { Query, QueryTag } from './Query'
 import { Graph } from '../graph'
-// import { tvalEquals } from '../TaggedValue'
 import { WarnOnMultipleMatches, VerboseTraceFindMatch, VerboseTraceFindMatchFails } from '../config'
-// import { Trace } from '../Trace'
 import { ErrorItem } from '../Errors'
 import { Handler } from '../handler'
 
@@ -49,7 +47,7 @@ export interface QueryToHandlerMatch {
     unusedOptionalsCount: number
 }
 
-class MatchContext {
+export class MatchContext {
 
 }
 
@@ -69,7 +67,7 @@ function findOneQueryTagOnHandler(ctx: MatchContext, tag: QueryTag, handler: Han
 
         // Mount does not provide this attribute.
         if (VerboseTraceFindMatchFails) {
-            console.log(`  match failed, rule does not have ${attr}:`, handler.toDeclString());
+            console.log(`  match failed, handler does not have attr '${attr}':`, handler.toDeclString());
         }
 
         return null;
@@ -78,7 +76,7 @@ function findOneQueryTagOnHandler(ctx: MatchContext, tag: QueryTag, handler: Han
     if (handlerTag.requiresValue && !tag.hasValue()) {
         // Mount requires a value and the query doesn't provide.
         if (VerboseTraceFindMatchFails) {
-            console.log(`  match failed, rule requires value for ${attr}:`, handler.toDeclString());
+            console.log(`  match failed, handler requires value for '${attr}':`, handler.toDeclString());
         }
         return null;
     }
@@ -128,6 +126,10 @@ function findOneQueryTagOnHandler(ctx: MatchContext, tag: QueryTag, handler: Han
  Try to match this query with this handler.
 */
 export function matchQueryWithHandler(ctx: MatchContext, query: Query, handler: Handler): QueryToHandlerMatch {
+
+    if (VerboseTraceFindMatchFails) {
+        console.log('matchQueryWithHandler looking at handler: ' + handler.toDeclString())
+    }
 
     const attrMatches = new Map();
     let unusedOptionalsCount = 0;
@@ -235,24 +237,33 @@ export function getClosestWrongQueryMountMatch(ctx: MatchContext, query: Query, 
     }
 }
 
-export function findBestPointMatch(ctx: MatchContext, graph: Graph, query: Query): QueryToHandlerMatch | null {
+export function matchHandlerToQuery(ctx: MatchContext, graph: Graph, query: Query): QueryToHandlerMatch | null {
     if (!graph)
         throw new Error("missing graph");
 
-    if (VerboseTraceFindMatchFails)
-        console.log('FindMatch searching for: ', query);
+    if (VerboseTraceFindMatch)
+        console.log('FindMatch searching for: ', query.toQueryString());
 
     let matches: QueryToHandlerMatch[] = [];
 
+    let numberChecked = 0;
+
     for (const handler of graph.eachHandler()) {
         const match = matchQueryWithHandler(ctx, query, handler);
+        numberChecked++;
 
         if (match)
             matches.push(match);
     }
 
-    if (matches.length === 0)
+    if (matches.length === 0) {
+        if (VerboseTraceFindMatch) {
+            console.error('FindMatch no match found for: ', query.toQueryString());
+            if (numberChecked == 0)
+                console.error('(graph has no handlers)');
+        }
         return null;
+    }
 
     // Prefer fewer missed optionals
     matches.sort((a,b) => a.unusedOptionalsCount - b.unusedOptionalsCount);
@@ -298,7 +309,7 @@ export function errorForNoTableFound(ctx: MatchContext, graph: Graph, query: Que
     const closestMatches = findClosestWrongMatches(ctx, graph, query);
 
     let error: ErrorItem = {
-        errorType: 'no_table_found',
+        errorType: 'no_handler_found',
         fromQuery: query.toQueryString(),
     }
 
