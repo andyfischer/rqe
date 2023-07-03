@@ -8,18 +8,51 @@
 
 |  Class | Description |
 |  --- | --- |
+|  [ErrorExtended](./rqe.errorextended.md) |  |
 |  [Graph](./rqe.graph.md) |  |
+|  [IDSource](./rqe.idsource.md) | A simple helper class that returns a unique ID every time you call .take() |
+|  [Query](./rqe.query.md) |  |
+|  [Schema](./rqe.schema.md) |  |
 |  [Stream](./rqe.stream.md) |  |
+|  [Task](./rqe.task.md) |  |
 
 ## Functions
 
 |  Function | Description |
 |  --- | --- |
-|  [streamToCsvFile(input, options, filename)](./rqe.streamtocsvfile.md) |  |
+|  [callbackToStream(callback, stream)](./rqe.callbacktostream.md) |  |
+|  [captureException(error, context)](./rqe.captureexception.md) |  |
+|  [compileSchema(decl)](./rqe.compileschema.md) |  |
+|  [exposeFunc(decl, func)](./rqe.exposefunc.md) |  |
+|  [formatItem(item)](./rqe.formatitem.md) |  |
+|  [getGraph()](./rqe.getgraph.md) |  |
+|  [newTrigger()](./rqe.newtrigger.md) |  |
+|  [query(queryStr, params)](./rqe.query.md) |  |
+|  [randomHex(length)](./rqe.randomhex.md) |  |
+|  [streamToTable(setup)](./rqe.streamtotable.md) |  |
+|  [timedOut(p, ms)](./rqe.timedout.md) |  |
+|  [toQuery(queryLike)](./rqe.toquery.md) |  |
 
 ## Interfaces
 
 |  Interface | Description |
 |  --- | --- |
+|  [SchemaDecl](./rqe.schemadecl.md) |  |
+|  [StreamReceiver](./rqe.streamreceiver.md) |  |
 |  [Table](./rqe.table.md) |  |
+
+## Variables
+
+|  Variable | Description |
+|  --- | --- |
+|  [c\_close](./rqe.c_close.md) |  |
+|  [c\_done](./rqe.c_done.md) |  |
+|  [c\_error](./rqe.c_error.md) |  |
+|  [c\_item](./rqe.c_item.md) |  |
+
+## Type Aliases
+
+|  Type Alias | Description |
+|  --- | --- |
+|  [StreamEvent](./rqe.streamevent.md) |  |
 

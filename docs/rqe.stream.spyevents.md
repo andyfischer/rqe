@@ -14,7 +14,7 @@ spyEvents(callback: (evt: StreamEvent<ItemType>) => void): Stream<ItemType>;
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  callback | (evt: StreamEvent&lt;ItemType&gt;) =&gt; void |  |
+|  callback | (evt: [StreamEvent](./rqe.streamevent.md)<!-- -->&lt;ItemType&gt;) =&gt; void |  |
 
 **Returns:**
 

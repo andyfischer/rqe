@@ -7,7 +7,7 @@
 **Signature:**
 
 ```typescript
-export declare interface Table<ItemType = any> 
+export interface Table<ItemType = any> 
 ```
 
 ## Properties
@@ -19,7 +19,7 @@ export declare interface Table<ItemType = any>
 |  [indexType](./rqe.table.indextype.md) |  | TableIndexType |  |
 |  [items](./rqe.table.items.md) |  | any |  |
 |  [listenerStreams?](./rqe.table.listenerstreams.md) |  | [Stream](./rqe.stream.md)<!-- -->\[\] | _(Optional)_ |
-|  [schema](./rqe.table.schema.md) |  | Schema |  |
+|  [schema](./rqe.table.schema.md) |  | [Schema](./rqe.schema.md) |  |
 |  [status?](./rqe.table.status.md) |  | [Table](./rqe.table.md)<!-- -->&lt;StatusTableItem&gt; | _(Optional)_ |
 
 ## Methods

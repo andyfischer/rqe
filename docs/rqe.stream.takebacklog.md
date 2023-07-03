@@ -11,5 +11,5 @@ takeBacklog(): StreamEvent[];
 ```
 **Returns:**
 
-StreamEvent\[\]
+[StreamEvent](./rqe.streamevent.md)<!-- -->\[\]
 

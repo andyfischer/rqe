@@ -11,5 +11,5 @@ promiseEvents(): Promise<StreamEvent<any>[]>;
 ```
 **Returns:**
 
-Promise&lt;StreamEvent&lt;any&gt;\[\]&gt;
+Promise&lt;[StreamEvent](./rqe.streamevent.md)<!-- -->&lt;any&gt;\[\]&gt;
 

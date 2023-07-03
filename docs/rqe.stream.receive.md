@@ -14,7 +14,7 @@ receive(event: StreamEvent): void;
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  event | StreamEvent |  |
+|  event | [StreamEvent](./rqe.streamevent.md) |  |
 
 **Returns:**
 

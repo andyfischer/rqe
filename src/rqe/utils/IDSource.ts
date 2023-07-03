@@ -1,4 +1,7 @@
 
+/**
+ * A simple helper class that returns a unique ID every time you call .take()
+ */
 export class IDSource {
     next: number = 1;
 

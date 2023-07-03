@@ -14,7 +14,7 @@ collectEvents(callback: (events: StreamEvent[]) => void): void;
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  callback | (events: StreamEvent\[\]) =&gt; void |  |
+|  callback | (events: [StreamEvent](./rqe.streamevent.md)<!-- -->\[\]) =&gt; void |  |
 
 **Returns:**
 

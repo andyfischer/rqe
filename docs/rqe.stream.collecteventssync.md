@@ -11,5 +11,5 @@ collectEventsSync(): StreamEvent[];
 ```
 **Returns:**
 
-StreamEvent\[\]
+[StreamEvent](./rqe.streamevent.md)<!-- -->\[\]
 

@@ -14,7 +14,7 @@ getTable<T = any>(schema: Schema<Table<T>>): any;
 
 |  Parameter | Type | Description |
 |  --- | --- | --- |
-|  schema | Schema&lt;[Table](./rqe.table.md)<!-- -->&lt;T&gt;&gt; |  |
+|  schema | [Schema](./rqe.schema.md)<!-- -->&lt;[Table](./rqe.table.md)<!-- -->&lt;T&gt;&gt; |  |
 
 **Returns:**
 

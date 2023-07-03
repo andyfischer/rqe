@@ -172,7 +172,7 @@ export class HttpClient<RequestType> implements RequestClient<RequestType> {
 
                 while (true) {
                   iterationLimit++;
-                  if (iterationLimit > 5000)
+                  if (iterationLimit > 1000000)
                       throw new Error("reached iteration limit in HttpClient reader");
 
                   const { value, done } = await reader.read();

@@ -2,8 +2,8 @@
   "name": "rqe",
   "version": "0.4.0",
   "description": "",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/rqe/index.js",
+  "types": "dist/rqe/index.d.ts",
   "scripts": {
     "build": "tsc -p .",
     "prepare": "tsc -p .",

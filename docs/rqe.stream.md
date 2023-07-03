@@ -9,18 +9,18 @@
 ```typescript
 export declare class Stream<ItemType = any> implements StreamReceiver 
 ```
-**Implements:** StreamReceiver
+**Implements:** [StreamReceiver](./rqe.streamreceiver.md)
 
 ## Properties
 
 |  Property | Modifiers | Type | Description |
 |  --- | --- | --- | --- |
-|  [backlog](./rqe.stream.backlog.md) |  | StreamEvent\[\] |  |
+|  [backlog](./rqe.stream.backlog.md) |  | [StreamEvent](./rqe.streamevent.md)<!-- -->\[\] |  |
 |  [closedByDownstream](./rqe.stream.closedbydownstream.md) |  | boolean |  |
 |  [closedByUpstream](./rqe.stream.closedbyupstream.md) |  | boolean |  |
 |  [downstreamMetadata?](./rqe.stream.downstreammetadata.md) |  | { name: string; } | _(Optional)_ |
 |  [globalId](./rqe.stream.globalid.md) |  | number |  |
-|  [receiver](./rqe.stream.receiver.md) |  | StreamReceiver |  |
+|  [receiver](./rqe.stream.receiver.md) |  | [StreamReceiver](./rqe.streamreceiver.md) |  |
 |  [t](./rqe.stream.t.md) |  | string |  |
 |  [upstreamData?](./rqe.stream.upstreamdata.md) |  | any | _(Optional)_ |
 |  [upstreamMetadata?](./rqe.stream.upstreammetadata.md) |  | { name: string; } | _(Optional)_ |
